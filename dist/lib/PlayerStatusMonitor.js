@@ -177,7 +177,7 @@ async function _PlayerStatusMonitor_getPlayerSyncMaster() {
         shuffleMode: data['playlist shuffle'],
         canSeek: data['can_seek']
     };
-    const track = data.playlist_loop[0];
+    const track = data.playlist_loop?.[0];
     if (track) {
         result.currentTrack = {
             type: track.type,
