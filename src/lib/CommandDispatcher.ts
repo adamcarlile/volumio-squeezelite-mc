@@ -1,7 +1,7 @@
 import { sendRpcRequest } from './RPC';
-import { ServerConnectParams, getServerConnectParams } from './Util';
-import Player from './types/Player';
-import { ServerCredentials } from './types/Server';
+import { type ServerConnectParams, getServerConnectParams } from './Util';
+import type Player from './types/Player';
+import { type ServerCredentials } from './types/Server';
 
 export default class CommandDispatcher {
   #playerId: string;

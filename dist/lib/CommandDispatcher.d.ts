@@ -1,5 +1,5 @@
-import Player from './types/Player';
-import { ServerCredentials } from './types/Server';
+import type Player from './types/Player';
+import { type ServerCredentials } from './types/Server';
 export default class CommandDispatcher {
     #private;
     constructor(player: Player, serverCredentials: ServerCredentials);

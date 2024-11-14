@@ -15,9 +15,11 @@ import CommandDispatcher from './lib/CommandDispatcher';
 import Proxy, { ProxyStatus } from './lib/Proxy';
 import PlayerFinder, { PlayerFinderStatus } from './lib/PlayerFinder';
 import equal from 'fast-deep-equal';
-import { ServerCredentials } from './lib/types/Server';
-import Player, { AlsaConfig, BasicPlayerStartupParams, PlayerRunState, PlayerStartupParams, PlayerStatus } from './lib/types/Player';
-import { BasicPlayerConfig, ManualPlayerConfig, PlayerConfig } from './lib/Config';
+import { type ServerCredentials } from './lib/types/Server';
+import {type AlsaConfig, type BasicPlayerStartupParams, type PlayerStartupParams, type PlayerStatus} from './lib/types/Player';
+import type Player from './lib/types/Player';
+import { PlayerRunState } from './lib/types/Player';
+import { type BasicPlayerConfig, type ManualPlayerConfig, type PlayerConfig } from './lib/Config';
 
 interface VolumioState {
   service: string;
@@ -353,6 +355,10 @@ class ControllerSqueezeliteMC {
     return [ 'config.json' ];
   }
 
+  #stdLogError(fn: string, error: unknown, stack = false) {
+    sm.getLogger().error(sm.getErrorMessage(`[squeezelite_mc] Caught error in ${fn}:`, error, stack));
+  }
+
   /**
    * Plugin lifecycle
    */
@@ -386,7 +392,11 @@ class ControllerSqueezeliteMC {
           if (this.#lastState && this.#lastState.status === 'play' && this.#lastState.seek !== undefined) {
             this.#pushState({ ...this.#lastState, seek: this.#playbackTimer.getSeek() });
           }
-          this.#commandDispatcher.sendVolume(this.#volumioVolume);
+          this.#commandDispatcher
+            .sendVolume(this.#volumioVolume)
+            .catch((error: unknown) => {
+              this.#stdLogError('sendVolume()', error);
+            });
         }
       };
       this.#commandRouter.addCallback('volumioupdatevolume', this.#volumioSetVolumeCallback);
@@ -420,7 +430,7 @@ class ControllerSqueezeliteMC {
         this.#playerRunState = PlayerRunState.Normal;
         defer.resolve();
       })
-      .catch((error) => {
+      .catch((error: unknown) => {
         this.#playerRunState = PlayerRunState.StartError;
         if (error instanceof SystemError && error.code === SystemErrorCode.DeviceBusy) {
           sm.toast('error', sm.getI18n('SQUEEZELITE_MC_ERR_START_DEV_BUSY'));
@@ -478,7 +488,7 @@ class ControllerSqueezeliteMC {
       sm.reset();
       defer.resolve();
     })
-      .catch((error) => {
+      .catch((error: unknown) => {
         sm.toast('error', sm.getErrorMessage(sm.getI18n('SQUEEZELITE_MC_ERR_STOP'), error, false));
         defer.reject(error);
       });
@@ -490,31 +500,37 @@ class ControllerSqueezeliteMC {
    * Workflow logic
    */
 
-  async #initAndStartPlayerFinder() {
+  #initAndStartPlayerFinder() {
     if (!this.#playerFinder) {
       this.#playerFinder = new PlayerFinder();
 
-      this.#playerFinder.on('found', async (data) => {
-        const serverCredentials = sm.getConfigValue('serverCredentials');
-        const player = data[0];
-        sm.getLogger().info(`[squeezelite_mc] Player found: ${JSON.stringify(player)}`);
-        this.#commandDispatcher = new CommandDispatcher(player, serverCredentials);
-
-        // Set Squeezelite's volume to Volumio's
-        if (this.#volumioVolume !== undefined) {
-          await this.#commandDispatcher.sendVolume(this.#volumioVolume);
-        }
-
-        await this.#applyFadeOnPauseResume();
-
-        await this.#clearPlayerStatusMonitor(); // Ensure there is only one monitor instance
-        const playerStatusMonitor = new PlayerStatusMonitor(player, serverCredentials);
-        this.#playerStatusMonitor = playerStatusMonitor;
-        playerStatusMonitor.on('update', this.#handlePlayerStatusUpdate.bind(this));
-        playerStatusMonitor.on('disconnect', this.#handlePlayerDisconnect.bind(this));
-        await playerStatusMonitor.start();
-
-        sm.toast('info', sm.getI18n('SQUEEZELITE_MC_CONNECTED', player.server.name, player.server.ip));
+      this.#playerFinder.on('found', (data) => {
+        void (async () => {
+          const serverCredentials = sm.getConfigValue('serverCredentials');
+          const player = data[0];
+          sm.getLogger().info(`[squeezelite_mc] Player found: ${JSON.stringify(player)}`);
+          this.#commandDispatcher = new CommandDispatcher(player, serverCredentials);
+  
+          // Set Squeezelite's volume to Volumio's
+          if (this.#volumioVolume !== undefined) {
+            await this.#commandDispatcher.sendVolume(this.#volumioVolume);
+          }
+  
+          await this.#applyFadeOnPauseResume();
+  
+          await this.#clearPlayerStatusMonitor(); // Ensure there is only one monitor instance
+          const playerStatusMonitor = new PlayerStatusMonitor(player, serverCredentials);
+          this.#playerStatusMonitor = playerStatusMonitor;
+          playerStatusMonitor.on('update', (data) => {
+            void (async () => {
+              await this.#handlePlayerStatusUpdate(data);
+            })();
+          });
+          playerStatusMonitor.on('disconnect', this.#handlePlayerDisconnect.bind(this));
+          await playerStatusMonitor.start();
+  
+          sm.toast('info', sm.getI18n('SQUEEZELITE_MC_CONNECTED', player.server.name, player.server.ip));
+        })();
       });
 
       this.#playerFinder.on('lost', this.#handlePlayerDisconnect.bind(this));
@@ -575,20 +591,22 @@ class ControllerSqueezeliteMC {
     }
   }
 
-  async #handlePlayerDisconnect() {
+  #handlePlayerDisconnect() {
     if (this.#playerStatusMonitor) {
       const player = this.#playerStatusMonitor.getPlayer();
       sm.toast('info', sm.getI18n('SQUEEZELITE_MC_DISCONNECTED', player.server.name, player.server.ip));
     }
-    await this.#clearPlayerStatusMonitor();
-    this.#commandDispatcher = null;
-    this.#lastState = null;
-    if (this.#playbackTimer) {
-      this.#playbackTimer.stop();
-    }
-    if (this.#isCurrentService()) {
-      this.unsetVolatile();
-    }
+    void (async () => {
+      await this.#clearPlayerStatusMonitor();
+      this.#commandDispatcher = null;
+      this.#lastState = null;
+      if (this.#playbackTimer) {
+        this.#playbackTimer.stop();
+      }
+      if (this.#isCurrentService()) {
+        this.unsetVolatile();
+      }
+    })();
   }
 
   #handlePlayerDiscoveryError(message: string) {
@@ -772,7 +790,7 @@ class ControllerSqueezeliteMC {
       return;
     }
 
-    const stopCurrentServicePlayback = async () => {
+    const stopCurrentServicePlayback = () => {
       try {
         const currentService = this.#getCurrentService();
         const statemachine = sm.getStateMachine();
@@ -1082,15 +1100,18 @@ class ControllerSqueezeliteMC {
     }
   }
 
-  async #handlePlayerConfigChange() {
+  #handlePlayerConfigChange() {
     // Volumio can emit multiple change notifications within a short interval.
     // We set a delay timer to avoid calling initSqueezeliteService() multiple times.
     if (this.#playerConfigChangeDelayTimer) {
       clearTimeout(this.#playerConfigChangeDelayTimer);
       this.#playerConfigChangeDelayTimer = null;
     }
-    this.#playerConfigChangeDelayTimer = setTimeout(async () => {
-      this.#revalidatePlayerConfig();
+    this.#playerConfigChangeDelayTimer = setTimeout(() => {
+      this.#revalidatePlayerConfig()
+        .catch((error: unknown) => {
+          this.#stdLogError('#revalidatePlayerConfig()', error);
+        });
     }, 1500);
   }
 
@@ -1122,7 +1143,10 @@ class ControllerSqueezeliteMC {
    */
 
   configStartSqueezelite(data: { force?: boolean }) {
-    this.#revalidatePlayerConfig(data);
+    this.#revalidatePlayerConfig(data)
+      .catch((error: unknown) => {
+        this.#stdLogError('#revalidatePlayerConfig()', error);
+      });
   }
 
   configSaveServerCredentials(data: Record<string, string> = {}) {
@@ -1173,19 +1197,28 @@ class ControllerSqueezeliteMC {
         }
         this.#clearPlayerStatusMonitor()
           .then(() => this.#clearPlayerFinder())
-          .then(() => this.#initAndStartPlayerFinder());
+          .then(() => this.#initAndStartPlayerFinder())
+          .catch((error: unknown) => {
+            this.#stdLogError('#clearPlayerStatusMonitor()', error);
+          });
       });
     }
   }
 
   configSwitchToBasicSqueezeliteSettings() {
     sm.setConfigValue('playerConfigType', 'basic');
-    this.#revalidatePlayerConfig({ force: true });
+    this.#revalidatePlayerConfig({ force: true })
+      .catch((error: unknown) => {
+        this.#stdLogError('#revalidatePlayerConfig()', error);
+      });
   }
 
   configSwitchToManualSqueezeliteSettings() {
     sm.setConfigValue('playerConfigType', 'manual');
-    this.#revalidatePlayerConfig({ force: true });
+    this.#revalidatePlayerConfig({ force: true })
+      .catch((error: unknown) => {
+        this.#stdLogError('#revalidatePlayerConfig()', error);
+      });
   }
 
   async configSaveBasicSqueezeliteSettings(data: any) {
@@ -1218,7 +1251,10 @@ class ControllerSqueezeliteMC {
       sm.toast('success', sm.getI18n('SQUEEZELITE_MC_SETTINGS_SAVED'));
     }
     else {
-      this.#revalidatePlayerConfig();
+      this.#revalidatePlayerConfig()
+        .catch((error: unknown) => {
+          this.#stdLogError('#revalidatePlayerConfig()', error);
+        });
     }
   }
 
@@ -1239,7 +1275,10 @@ class ControllerSqueezeliteMC {
       sm.toast('success', sm.getI18n('SQUEEZELITE_MC_SETTINGS_SAVED'));
     }
     else {
-      this.#revalidatePlayerConfig();
+      this.#revalidatePlayerConfig()
+        .catch((error: unknown) => {
+          this.#stdLogError('#revalidatePlayerConfig()', error);
+        });
     }
   }
 
@@ -1249,7 +1288,10 @@ class ControllerSqueezeliteMC {
 
   stop() {
     if (this.#commandDispatcher) {
-      this.#commandDispatcher.sendStop();
+      this.#commandDispatcher.sendStop()
+        .catch((error: unknown) => {
+          this.#stdLogError('#commandDispatcher.sendStop()', error);
+        });
       return this.#resolveOnStatusMode('stop');
     }
     return libQ.resolve(true);
@@ -1257,7 +1299,10 @@ class ControllerSqueezeliteMC {
 
   play() {
     if (this.#commandDispatcher) {
-      this.#commandDispatcher.sendPlay();
+      this.#commandDispatcher.sendPlay()
+        .catch((error: unknown) => {
+          this.#stdLogError('#commandDispatcher.sendPlay()', error);
+        });
       return this.#resolveOnStatusMode('play');
     }
     return libQ.resolve(true);
@@ -1265,7 +1310,10 @@ class ControllerSqueezeliteMC {
 
   pause() {
     if (this.#commandDispatcher) {
-      this.#commandDispatcher.sendPause();
+      this.#commandDispatcher.sendPause()
+        .catch((error: unknown) => {
+          this.#stdLogError('#commandDispatcher.sendPause()', error);
+        });
       return this.#resolveOnStatusMode('pause');
     }
     return libQ.resolve(true);
@@ -1273,7 +1321,10 @@ class ControllerSqueezeliteMC {
 
   resume() {
     if (this.#commandDispatcher) {
-      this.#commandDispatcher.sendPlay();
+      this.#commandDispatcher.sendPlay()
+        .catch((error: unknown) => {
+          this.#stdLogError('#commandDispatcher.sendPlay()', error);
+        });
       return this.#resolveOnStatusMode('play');
     }
     return libQ.resolve(true);
@@ -1281,14 +1332,20 @@ class ControllerSqueezeliteMC {
 
   seek(position: number) {
     if (this.#commandDispatcher) {
-      return jsPromiseToKew(this.#commandDispatcher.sendSeek(position));
+      return jsPromiseToKew(this.#commandDispatcher.sendSeek(position)
+        .catch((error: unknown) => {
+          this.#stdLogError('#commandDispatcher.sendSeek()', error);
+        }));
     }
     return libQ.resolve(true);
   }
 
   next() {
     if (this.#commandDispatcher) {
-      return jsPromiseToKew(this.#commandDispatcher.sendNext());
+      return jsPromiseToKew(this.#commandDispatcher.sendNext()
+        .catch((error: unknown) => {
+          this.#stdLogError('#commandDispatcher.sendNext()', error);
+        }));
     }
     return libQ.resolve(true);
   }
@@ -1297,7 +1354,10 @@ class ControllerSqueezeliteMC {
     if (this.#commandDispatcher) {
       if (this.#previousDoubleClickTimeout) {
         this.#previousDoubleClickTimeout = null;
-        return jsPromiseToKew(this.#commandDispatcher.sendPrevious());
+        return jsPromiseToKew(this.#commandDispatcher.sendPrevious()
+          .catch((error: unknown) => {
+            this.#stdLogError('#commandDispatcher.sendPrevious()', error);
+          }));
       }
 
       this.#previousDoubleClickTimeout = setTimeout(() => {
@@ -1311,14 +1371,22 @@ class ControllerSqueezeliteMC {
 
   repeat(value: boolean, repeatSingle: boolean) {
     if (this.#commandDispatcher) {
-      this.#commandDispatcher.sendRepeat(value ? (repeatSingle ? LMS_REPEAT_CURRENT_SONG : LMS_REPEAT_PLAYLIST) : LMS_REPEAT_OFF);
+      this.#commandDispatcher
+        .sendRepeat(value ? (repeatSingle ? LMS_REPEAT_CURRENT_SONG : LMS_REPEAT_PLAYLIST) : LMS_REPEAT_OFF)
+        .catch((error: unknown) => {
+          this.#stdLogError('#commandDispatcher.sendRepeat()', error);
+        });
     }
     return libQ.resolve(true);
   }
 
   random(value: boolean) {
     if (this.#commandDispatcher) {
-      this.#commandDispatcher.sendShuffle(value ? LMS_SHUFFLE_BY_SONG : LMS_SHUFFLE_OFF);
+      this.#commandDispatcher
+        .sendShuffle(value ? LMS_SHUFFLE_BY_SONG : LMS_SHUFFLE_OFF)
+        .catch((error: unknown) => {
+          this.#stdLogError('#commandDispatcher.sendShuffle()', error);
+        });
     }
     return libQ.resolve(true);
   }

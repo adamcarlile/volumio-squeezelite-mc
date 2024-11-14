@@ -19,16 +19,14 @@ exports.ProxyStatus = void 0;
 const http_1 = __importDefault(require("http"));
 const express_1 = __importDefault(require("express"));
 const SqueezeliteMCContext_1 = __importDefault(require("./SqueezeliteMCContext"));
-const util_1 = require("util");
-const stream_1 = require("stream");
+const promises_1 = require("stream/promises");
 const Util_1 = require("./Util");
-const node_fetch_1 = __importDefault(require("node-fetch"));
 var ProxyStatus;
 (function (ProxyStatus) {
     ProxyStatus["Stopped"] = "stopped";
     ProxyStatus["Started"] = "started";
     ProxyStatus["Starting"] = "starting";
-})(ProxyStatus = exports.ProxyStatus || (exports.ProxyStatus = {}));
+})(ProxyStatus || (exports.ProxyStatus = ProxyStatus = {}));
 class Proxy {
     constructor(serverCredentials = {}) {
         _Proxy_instances.add(this);
@@ -118,8 +116,7 @@ class Proxy {
         __classPrivateFieldSet(this, _Proxy_serverCredentials, serverCredentials, "f");
     }
 }
-exports.default = Proxy;
-_Proxy_serverCredentials = new WeakMap(), _Proxy_server = new WeakMap(), _Proxy_status = new WeakMap(), _Proxy_startPromise = new WeakMap(), _Proxy_app = new WeakMap(), _Proxy_instances = new WeakSet(), _Proxy_handleRequest = async function _Proxy_handleRequest(req, res) {
+_Proxy_serverCredentials = new WeakMap(), _Proxy_server = new WeakMap(), _Proxy_status = new WeakMap(), _Proxy_startPromise = new WeakMap(), _Proxy_app = new WeakMap(), _Proxy_instances = new WeakSet(), _Proxy_handleRequest = function _Proxy_handleRequest(req, res) {
     const serverName = req.query.server_name;
     const url = req.query.url;
     const fallback = req.query.fallback;
@@ -130,47 +127,48 @@ _Proxy_serverCredentials = new WeakMap(), _Proxy_server = new WeakMap(), _Proxy_
      * one with the correct, untampered value.
      */
     if (typeof url !== 'string' || !__classPrivateFieldGet(this, _Proxy_instances, "m", _Proxy_validateURL).call(this, url)) {
-        SqueezeliteMCContext_1.default.getLogger().error(`[squeezelite_mc] Proxy: invalid URL (${url})`);
+        SqueezeliteMCContext_1.default.getLogger().error(`[squeezelite_mc] Proxy: invalid URL (${String(url)})`);
         return res.status(400).end();
     }
-    SqueezeliteMCContext_1.default.getLogger().info(`[squeezelite_mc] Proxy request for ${serverName}, URL: ${url}`);
-    const streamPipeline = (0, util_1.promisify)(stream_1.pipeline);
-    const headers = {};
-    const credentials = serverName ? __classPrivateFieldGet(this, _Proxy_serverCredentials, "f")[serverName.toString()] : null;
-    if (credentials) {
-        headers.Authorization = `Basic ${(0, Util_1.encodeBase64)(`${credentials.username}:${credentials.password || ''}`)}`;
-    }
-    try {
-        const response = await (0, node_fetch_1.default)(url, { headers });
-        if (!response.ok) {
-            SqueezeliteMCContext_1.default.getLogger().error(`[squeezelite_mc] Proxy received unexpected response: ${response.status} - ${response.statusText}`);
+    void (async () => {
+        SqueezeliteMCContext_1.default.getLogger().info(`[squeezelite_mc] Proxy request for ${String(serverName)}, URL: ${url}`);
+        const headers = {};
+        const credentials = serverName ? __classPrivateFieldGet(this, _Proxy_serverCredentials, "f")[serverName.toString()] : null;
+        if (credentials) {
+            headers.Authorization = `Basic ${(0, Util_1.encodeBase64)(`${credentials.username}:${credentials.password || ''}`)}`;
+        }
+        try {
+            const response = await fetch(url, { headers });
+            if (!response.ok) {
+                SqueezeliteMCContext_1.default.getLogger().error(`[squeezelite_mc] Proxy received unexpected response: ${response.status} - ${response.statusText}`);
+                if (typeof fallback === 'string') {
+                    res.redirect(fallback);
+                }
+            }
+            else if (!response.body) {
+                SqueezeliteMCContext_1.default.getLogger().error('[squeezelite_mc] Proxy received empty response body');
+                if (typeof fallback === 'string') {
+                    res.redirect(fallback);
+                }
+            }
+            else {
+                await (0, promises_1.pipeline)(response.body, res);
+            }
+        }
+        catch (error) {
+            SqueezeliteMCContext_1.default.getLogger().error(SqueezeliteMCContext_1.default.getErrorMessage('[squeezelite_mc] Proxy server encountered the following error:', error));
             if (typeof fallback === 'string') {
-                res.redirect(fallback);
+                // It might be too late to redirect the response to fallback, so need to try-catch
+                try {
+                    res.redirect(fallback);
+                }
+                catch (error) {
+                    SqueezeliteMCContext_1.default.getLogger().error(SqueezeliteMCContext_1.default.getErrorMessage('[squeezelite_mc] Proxy server failed to redirect response to fallback url:', error, false));
+                    res.end();
+                }
             }
         }
-        else if (!response.body) {
-            SqueezeliteMCContext_1.default.getLogger().error('[squeezelite_mc] Proxy received empty response body');
-            if (typeof fallback === 'string') {
-                res.redirect(fallback);
-            }
-        }
-        else {
-            await streamPipeline(response.body, res);
-        }
-    }
-    catch (error) {
-        SqueezeliteMCContext_1.default.getLogger().error(SqueezeliteMCContext_1.default.getErrorMessage('[squeezelite_mc] Proxy server encountered the following error:', error));
-        if (typeof fallback === 'string') {
-            // It might be too late to redirect the response to fallback, so need to try-catch
-            try {
-                res.redirect(fallback);
-            }
-            catch (error) {
-                SqueezeliteMCContext_1.default.getLogger().error(SqueezeliteMCContext_1.default.getErrorMessage('[squeezelite_mc] Proxy server failed to redirect response to fallback url:', error, false));
-                res.end();
-            }
-        }
-    }
+    })();
 }, _Proxy_validateURL = function _Proxy_validateURL(url) {
     try {
         const test = new URL(url);
@@ -180,4 +178,5 @@ _Proxy_serverCredentials = new WeakMap(), _Proxy_server = new WeakMap(), _Proxy_
         return false;
     }
 };
+exports.default = Proxy;
 //# sourceMappingURL=Proxy.js.map

@@ -1,10 +1,6 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendRpcRequest = void 0;
-const node_fetch_1 = __importDefault(require("node-fetch"));
+exports.sendRpcRequest = sendRpcRequest;
 const Util_1 = require("./Util");
 const BASE_REQUEST_BODY = {
     'id': 1,
@@ -24,14 +20,14 @@ async function sendRpcRequest(connectParams, params, abortController) {
         headers.Authorization = `Basic ${(0, Util_1.encodeBase64)(`${connectParams.username}:${connectParams.password || ''}`)}`;
     }
     try {
-        const response = await (0, node_fetch_1.default)(url, {
+        const response = await fetch(url, {
             method: 'post',
             body: JSON.stringify(body),
             headers,
             signal: abortController ? abortController.signal : undefined
         });
         if (response.ok) {
-            return response.json();
+            return await response.json();
         }
         throw new Error(`${response.status} - ${response.statusText}`);
     }
@@ -42,7 +38,6 @@ async function sendRpcRequest(connectParams, params, abortController) {
         throw error;
     }
 }
-exports.sendRpcRequest = sendRpcRequest;
 module.exports = {
     sendRpcRequest
 };

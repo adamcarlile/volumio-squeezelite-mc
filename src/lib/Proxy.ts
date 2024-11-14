@@ -1,11 +1,9 @@
-import http, { Server as HttpServer } from 'http';
+import http, { type Server as HttpServer } from 'http';
 import express from 'express';
 import sm from './SqueezeliteMCContext';
-import { ServerCredentials } from './types/Server';
-import { promisify } from 'util';
-import { pipeline } from 'stream';
+import { type ServerCredentials } from './types/Server';
+import { pipeline } from 'stream/promises';
 import { encodeBase64 } from './Util';
-import fetch, { HeadersInit } from 'node-fetch';
 
 export enum ProxyStatus {
   Stopped = 'stopped',
@@ -116,7 +114,7 @@ export default class Proxy {
     this.#serverCredentials = serverCredentials;
   }
 
-  async #handleRequest(req: express.Request, res: express.Response) {
+  #handleRequest(req: express.Request, res: express.Response) {
     const serverName = req.query.server_name;
     const url = req.query.url;
     const fallback = req.query.fallback;
@@ -128,48 +126,49 @@ export default class Proxy {
      * one with the correct, untampered value.
      */
     if (typeof url !== 'string' || !this.#validateURL(url)) {
-      sm.getLogger().error(`[squeezelite_mc] Proxy: invalid URL (${url})`);
+      sm.getLogger().error(`[squeezelite_mc] Proxy: invalid URL (${String(url)})`);
       return res.status(400).end();
     }
 
-    sm.getLogger().info(`[squeezelite_mc] Proxy request for ${serverName}, URL: ${url}`);
-    const streamPipeline = promisify(pipeline);
-    const headers: HeadersInit = {};
-    const credentials = serverName ? this.#serverCredentials[serverName.toString()] : null;
-    if (credentials) {
-      headers.Authorization = `Basic ${encodeBase64(`${credentials.username}:${credentials.password || ''}`)}`;
-    }
-    try {
-      const response = await fetch(url, { headers });
-      if (!response.ok) {
-        sm.getLogger().error(`[squeezelite_mc] Proxy received unexpected response: ${response.status} - ${response.statusText}`);
+    void (async () => {
+      sm.getLogger().info(`[squeezelite_mc] Proxy request for ${String(serverName)}, URL: ${url}`);
+      const headers: HeadersInit = {};
+      const credentials = serverName ? this.#serverCredentials[(serverName as any).toString()] : null;
+      if (credentials) {
+        headers.Authorization = `Basic ${encodeBase64(`${credentials.username}:${credentials.password || ''}`)}`;
+      }
+      try {
+        const response = await fetch(url, { headers });
+        if (!response.ok) {
+          sm.getLogger().error(`[squeezelite_mc] Proxy received unexpected response: ${response.status} - ${response.statusText}`);
+          if (typeof fallback === 'string') {
+            res.redirect(fallback);
+          }
+        }
+        else if (!response.body) {
+          sm.getLogger().error('[squeezelite_mc] Proxy received empty response body');
+          if (typeof fallback === 'string') {
+            res.redirect(fallback);
+          }
+        }
+        else {
+          await pipeline(response.body, res);
+        }
+      }
+      catch (error) {
+        sm.getLogger().error(sm.getErrorMessage('[squeezelite_mc] Proxy server encountered the following error:', error));
         if (typeof fallback === 'string') {
-          res.redirect(fallback);
+          // It might be too late to redirect the response to fallback, so need to try-catch
+          try {
+            res.redirect(fallback);
+          }
+          catch (error) {
+            sm.getLogger().error(sm.getErrorMessage('[squeezelite_mc] Proxy server failed to redirect response to fallback url:', error, false));
+            res.end();
+          }
         }
       }
-      else if (!response.body) {
-        sm.getLogger().error('[squeezelite_mc] Proxy received empty response body');
-        if (typeof fallback === 'string') {
-          res.redirect(fallback);
-        }
-      }
-      else {
-        await streamPipeline(response.body, res);
-      }
-    }
-    catch (error) {
-      sm.getLogger().error(sm.getErrorMessage('[squeezelite_mc] Proxy server encountered the following error:', error));
-      if (typeof fallback === 'string') {
-        // It might be too late to redirect the response to fallback, so need to try-catch
-        try {
-          res.redirect(fallback);
-        }
-        catch (error) {
-          sm.getLogger().error(sm.getErrorMessage('[squeezelite_mc] Proxy server failed to redirect response to fallback url:', error, false));
-          res.end();
-        }
-      }
-    }
+    })();
   }
 
   #validateURL(url: string) {

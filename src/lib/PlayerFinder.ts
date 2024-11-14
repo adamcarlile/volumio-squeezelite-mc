@@ -1,9 +1,10 @@
 import sm from './SqueezeliteMCContext';
-import serverDiscovery, { ServerInfo } from 'lms-discovery';
-import { Notification, NotificationListener } from 'lms-cli-notifications';
+import serverDiscovery, { type ServerInfo } from 'lms-discovery';
+import { type Notification, NotificationListener } from 'lms-cli-notifications';
 import EventEmitter from 'events';
-import Player from './types/Player';
-import Server, { ServerCredentials } from './types/Server';
+import type Player from './types/Player';
+import {type ServerCredentials} from './types/Server';
+import type Server from './types/Server';
 import { getServerConnectParams } from './Util';
 import { sendRpcRequest } from './RPC';
 
@@ -37,7 +38,7 @@ export default class PlayerFinder extends EventEmitter {
     this.#notificationListeners = {};
   }
 
-  async start(opts: PlayerFinderOptions = {}) {
+  start(opts: PlayerFinderOptions = {}) {
     this.#opts = opts;
 
     // Start server discovery
@@ -99,7 +100,7 @@ export default class PlayerFinder extends EventEmitter {
     }
   }
 
-  async #handleServerDiscovered(data: ServerInfo | Server) {
+  #handleServerDiscovered(data: ServerInfo | Server) {
     if (!data.cliPort) {
       sm.getLogger().warn(`[squeezelite_mc] Disregarding discovered server due to missing CLI port: ${JSON.stringify(data)}`);
       return;
@@ -114,38 +115,42 @@ export default class PlayerFinder extends EventEmitter {
     };
     sm.getLogger().info(`[squeezelite_mc] Server discovered: ${JSON.stringify(server)}`);
 
-    try {
-      this.#notificationListeners[server.ip] = await this.#createAndStartNotificationListener(server);
-      const players = await this.#getPlayersOnServer(server);
-      // During await #getPlayersOnServer(), notificationListener could have detected player connections and
-      // Added them to the list of found players. We need to filter them out.
-      const found = players.filter((player) => !this.#isPlayerConnected(player.id, server));
-      if (found.length > 0) {
-        this.#foundPlayers.push(...found);
-        this.#filterAndEmit(found, 'found');
+    void (async () => {
+      try {
+        this.#notificationListeners[server.ip] = await this.#createAndStartNotificationListener(server);
+        const players = await this.#getPlayersOnServer(server);
+        // During await #getPlayersOnServer(), notificationListener could have detected player connections and
+        // Added them to the list of found players. We need to filter them out.
+        const found = players.filter((player) => !this.#isPlayerConnected(player.id, server));
+        if (found.length > 0) {
+          this.#foundPlayers.push(...found);
+          this.#filterAndEmit(found, 'found');
+        }
       }
-    }
-    catch (error) {
-      sm.getLogger().error(sm.getErrorMessage('[squeezelite_mc] An error occurred while processing discovered server:', error));
-    }
+      catch (error) {
+        sm.getLogger().error(sm.getErrorMessage('[squeezelite_mc] An error occurred while processing discovered server:', error));
+      }
+    })();
   }
 
-  async #handleServerLost(server: ServerInfo | Server) {
+  #handleServerLost(server: ServerInfo | Server) {
     sm.getLogger().info(`[squeezelite_mc] Server lost: ${JSON.stringify(server)}`);
     const lost = this.#foundPlayers.filter((player) => player.server.ip === server.ip);
     this.#foundPlayers = this.#foundPlayers.filter((player) => player.server.ip !== server.ip);
     if (lost.length > 0) {
       this.#filterAndEmit(lost, 'lost');
     }
-    const notificationListener = this.#notificationListeners[server.ip];
-    if (notificationListener) {
-      notificationListener.removeAllListeners('notification');
-      notificationListener.removeAllListeners('disconnect');
-      delete this.#notificationListeners[server.ip];
-      if (notificationListener.isConnected()) {
-        await notificationListener.stop();
+    void (async () => {
+      const notificationListener = this.#notificationListeners[server.ip];
+      if (notificationListener) {
+        notificationListener.removeAllListeners('notification');
+        notificationListener.removeAllListeners('disconnect');
+        delete this.#notificationListeners[server.ip];
+        if (notificationListener.isConnected()) {
+          await notificationListener.stop();
+        }
       }
-    }
+    })();
   }
 
   #removeAndEmitLostByPlayerId(id: string) {
@@ -160,26 +165,28 @@ export default class PlayerFinder extends EventEmitter {
     return this.#foundPlayers.findIndex((player) => (player.id === playerId) && (player.server.ip === server.ip)) >= 0;
   }
 
-  async #handleNotification(server: Server, data: Notification) {
-    const {notification, playerId, params} = data;
-    if (notification === 'client' && playerId && params.length > 0) {
-      const type = (params[0] === 'new' || params[0] === 'reconnect') ? 'connect' :
-        params[0] === 'disconnect' ? 'disconnect' : null;
-      sm.getLogger().info(`[squeezelite_mc] 'client' notification received from ${server.name} (${server.ip}); type is '${type}'`);
-      if (type === 'connect' && !this.#isPlayerConnected(playerId, server)) {
-        this.#removeAndEmitLostByPlayerId(playerId);
-        const players = await this.#getPlayersOnServer(server);
-        const found = players.find((player) => player.id === playerId);
-        if (found) {
-          found.server = server;
-          this.#foundPlayers.push(found);
-          this.#filterAndEmit([ found ], 'found');
+  #handleNotification(server: Server, data: Notification) {
+    void (async () => {
+      const {notification, playerId, params} = data;
+      if (notification === 'client' && playerId && params.length > 0) {
+        const type = (params[0] === 'new' || params[0] === 'reconnect') ? 'connect' :
+          params[0] === 'disconnect' ? 'disconnect' : null;
+        sm.getLogger().info(`[squeezelite_mc] 'client' notification received from ${server.name} (${server.ip}); type is '${type}'`);
+        if (type === 'connect' && !this.#isPlayerConnected(playerId, server)) {
+          this.#removeAndEmitLostByPlayerId(playerId);
+          const players = await this.#getPlayersOnServer(server);
+          const found = players.find((player) => player.id === playerId);
+          if (found) {
+            found.server = server;
+            this.#foundPlayers.push(found);
+            this.#filterAndEmit([ found ], 'found');
+          }
+        }
+        else if (type === 'disconnect') {
+          this.#removeAndEmitLostByPlayerId(playerId);
         }
       }
-      else if (type === 'disconnect') {
-        this.#removeAndEmitLostByPlayerId(playerId);
-      }
-    }
+    })();
   }
 
   #filterAndEmit(players: Player[], eventName: string) {

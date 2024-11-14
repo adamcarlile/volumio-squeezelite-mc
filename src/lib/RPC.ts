@@ -1,6 +1,4 @@
-import fetch, { HeadersInit } from 'node-fetch';
-import { ServerConnectParams, encodeBase64 } from './Util';
-import { AbortController } from 'node-abort-controller';
+import { type ServerConnectParams, encodeBase64 } from './Util';
 
 const BASE_REQUEST_BODY = {
   'id': 1,
@@ -31,7 +29,7 @@ export async function sendRpcRequest(connectParams: ServerConnectParams, params:
     });
 
     if (response.ok) {
-      return response.json();
+      return await response.json();
     }
 
     throw new Error(`${response.status} - ${response.statusText}`);

@@ -7,5 +7,5 @@ var PlayerRunState;
     PlayerRunState[PlayerRunState["StartError"] = -1] = "StartError";
     PlayerRunState[PlayerRunState["ConfigRequireRestart"] = -2] = "ConfigRequireRestart";
     PlayerRunState[PlayerRunState["ConfigRequireRevalidate"] = -3] = "ConfigRequireRevalidate";
-})(PlayerRunState = exports.PlayerRunState || (exports.PlayerRunState = {}));
+})(PlayerRunState || (exports.PlayerRunState = PlayerRunState = {}));
 //# sourceMappingURL=Player.js.map

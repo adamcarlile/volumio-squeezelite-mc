@@ -1,4 +1,4 @@
-import { ServerCredentials } from './types/Server';
+import { type ServerCredentials } from './types/Server';
 export type PluginConfigKey = keyof PluginConfigSchema;
 export type PluginConfigValue<T extends PluginConfigKey> = PluginConfigSchema[T]['defaultValue'];
 export type DSDPlayback = 'pcm' | 'dop' | 'DSD_U8' | 'DSD_U16_LE' | 'DSD_U16_BE' | 'DSD_U32_LE' | 'DSD_U32_BE' | 'auto';

@@ -15,7 +15,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 var _PlaybackTimer_seek, _PlaybackTimer_timer;
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.basicPlayerStartupParamsToSqueezeliteOpts = exports.PlaybackTimer = exports.kewToJSPromise = exports.jsPromiseToKew = exports.getServerConnectParams = exports.encodeBase64 = exports.getNetworkInterfaces = void 0;
+exports.PlaybackTimer = void 0;
+exports.getNetworkInterfaces = getNetworkInterfaces;
+exports.encodeBase64 = encodeBase64;
+exports.getServerConnectParams = getServerConnectParams;
+exports.jsPromiseToKew = jsPromiseToKew;
+exports.kewToJSPromise = kewToJSPromise;
+exports.basicPlayerStartupParamsToSqueezeliteOpts = basicPlayerStartupParamsToSqueezeliteOpts;
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 const kew_1 = __importDefault(require("kew"));
@@ -42,11 +48,9 @@ function getNetworkInterfaces() {
     }
     return result;
 }
-exports.getNetworkInterfaces = getNetworkInterfaces;
 function encodeBase64(str) {
     return Buffer.from(str).toString('base64');
 }
-exports.encodeBase64 = encodeBase64;
 function getServerConnectParams(server, serverCredentials, connectType) {
     const params = {
         host: connectType === 'rpc' ? `http://${server.ip}` : server.ip,
@@ -59,7 +63,6 @@ function getServerConnectParams(server, serverCredentials, connectType) {
     }
     return params;
 }
-exports.getServerConnectParams = getServerConnectParams;
 function jsPromiseToKew(promise) {
     const defer = kew_1.default.defer();
     promise.then((result) => {
@@ -70,10 +73,9 @@ function jsPromiseToKew(promise) {
     });
     return defer.promise;
 }
-exports.jsPromiseToKew = jsPromiseToKew;
 function kewToJSPromise(promise) {
     // Guard against a JS promise from being passed to this function.
-    if (typeof promise.catch === 'function' && typeof promise.fail === undefined) {
+    if (typeof promise.catch === 'function' && typeof promise.fail === 'undefined') {
         // JS promise - return as is
         return promise;
     }
@@ -86,7 +88,6 @@ function kewToJSPromise(promise) {
         });
     });
 }
-exports.kewToJSPromise = kewToJSPromise;
 class PlaybackTimer {
     constructor() {
         _PlaybackTimer_seek.set(this, void 0);
@@ -136,5 +137,4 @@ function basicPlayerStartupParamsToSqueezeliteOpts(params) {
     parts.push(`-f ${System_1.SQUEEZELITE_LOG_FILE}`);
     return parts.join(' ');
 }
-exports.basicPlayerStartupParamsToSqueezeliteOpts = basicPlayerStartupParamsToSqueezeliteOpts;
 //# sourceMappingURL=Util.js.map

@@ -1,4 +1,4 @@
-import { ServerCredentials } from './types/Server';
+import { type ServerCredentials } from './types/Server';
 
 export type PluginConfigKey = keyof PluginConfigSchema;
 export type PluginConfigValue<T extends PluginConfigKey> = PluginConfigSchema[T]['defaultValue'];

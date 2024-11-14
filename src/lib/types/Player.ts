@@ -1,4 +1,4 @@
-import Server from './Server';
+import type Server from './Server';
 
 interface Player {
   id: string;

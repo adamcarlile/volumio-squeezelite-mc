@@ -26,7 +26,7 @@ var PlayerFinderStatus;
 (function (PlayerFinderStatus) {
     PlayerFinderStatus["Started"] = "started";
     PlayerFinderStatus["Stopped"] = "stopped";
-})(PlayerFinderStatus = exports.PlayerFinderStatus || (exports.PlayerFinderStatus = {}));
+})(PlayerFinderStatus || (exports.PlayerFinderStatus = PlayerFinderStatus = {}));
 class PlayerFinder extends events_1.default {
     constructor() {
         super();
@@ -39,7 +39,7 @@ class PlayerFinder extends events_1.default {
         __classPrivateFieldSet(this, _PlayerFinder_foundPlayers, [], "f");
         __classPrivateFieldSet(this, _PlayerFinder_notificationListeners, {}, "f");
     }
-    async start(opts = {}) {
+    start(opts = {}) {
         __classPrivateFieldSet(this, _PlayerFinder_opts, opts, "f");
         // Start server discovery
         lms_discovery_1.default.on('discovered', __classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_handleServerDiscovered).bind(this));
@@ -67,7 +67,6 @@ class PlayerFinder extends events_1.default {
         return __classPrivateFieldGet(this, _PlayerFinder_status, "f");
     }
 }
-exports.default = PlayerFinder;
 _PlayerFinder_status = new WeakMap(), _PlayerFinder_foundPlayers = new WeakMap(), _PlayerFinder_notificationListeners = new WeakMap(), _PlayerFinder_opts = new WeakMap(), _PlayerFinder_instances = new WeakSet(), _PlayerFinder_getPlayersOnServer = async function _PlayerFinder_getPlayersOnServer(server) {
     try {
         SqueezeliteMCContext_1.default.getLogger().info(`[squeezelite_mc] Getting players connected to ${server.name} (${server.ip})`);
@@ -97,7 +96,7 @@ _PlayerFinder_status = new WeakMap(), _PlayerFinder_foundPlayers = new WeakMap()
         this.emit('error', SqueezeliteMCContext_1.default.getErrorMessage(SqueezeliteMCContext_1.default.getI18n('SQUEEZELITE_MC_ERR_SERVER_REQUEST', server.name, server.ip), error, false));
         throw error;
     }
-}, _PlayerFinder_handleServerDiscovered = async function _PlayerFinder_handleServerDiscovered(data) {
+}, _PlayerFinder_handleServerDiscovered = function _PlayerFinder_handleServerDiscovered(data) {
     if (!data.cliPort) {
         SqueezeliteMCContext_1.default.getLogger().warn(`[squeezelite_mc] Disregarding discovered server due to missing CLI port: ${JSON.stringify(data)}`);
         return;
@@ -111,36 +110,40 @@ _PlayerFinder_status = new WeakMap(), _PlayerFinder_foundPlayers = new WeakMap()
         cliPort: data.cliPort
     };
     SqueezeliteMCContext_1.default.getLogger().info(`[squeezelite_mc] Server discovered: ${JSON.stringify(server)}`);
-    try {
-        __classPrivateFieldGet(this, _PlayerFinder_notificationListeners, "f")[server.ip] = await __classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_createAndStartNotificationListener).call(this, server);
-        const players = await __classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_getPlayersOnServer).call(this, server);
-        // During await #getPlayersOnServer(), notificationListener could have detected player connections and
-        // Added them to the list of found players. We need to filter them out.
-        const found = players.filter((player) => !__classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_isPlayerConnected).call(this, player.id, server));
-        if (found.length > 0) {
-            __classPrivateFieldGet(this, _PlayerFinder_foundPlayers, "f").push(...found);
-            __classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_filterAndEmit).call(this, found, 'found');
+    void (async () => {
+        try {
+            __classPrivateFieldGet(this, _PlayerFinder_notificationListeners, "f")[server.ip] = await __classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_createAndStartNotificationListener).call(this, server);
+            const players = await __classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_getPlayersOnServer).call(this, server);
+            // During await #getPlayersOnServer(), notificationListener could have detected player connections and
+            // Added them to the list of found players. We need to filter them out.
+            const found = players.filter((player) => !__classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_isPlayerConnected).call(this, player.id, server));
+            if (found.length > 0) {
+                __classPrivateFieldGet(this, _PlayerFinder_foundPlayers, "f").push(...found);
+                __classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_filterAndEmit).call(this, found, 'found');
+            }
         }
-    }
-    catch (error) {
-        SqueezeliteMCContext_1.default.getLogger().error(SqueezeliteMCContext_1.default.getErrorMessage('[squeezelite_mc] An error occurred while processing discovered server:', error));
-    }
-}, _PlayerFinder_handleServerLost = async function _PlayerFinder_handleServerLost(server) {
+        catch (error) {
+            SqueezeliteMCContext_1.default.getLogger().error(SqueezeliteMCContext_1.default.getErrorMessage('[squeezelite_mc] An error occurred while processing discovered server:', error));
+        }
+    })();
+}, _PlayerFinder_handleServerLost = function _PlayerFinder_handleServerLost(server) {
     SqueezeliteMCContext_1.default.getLogger().info(`[squeezelite_mc] Server lost: ${JSON.stringify(server)}`);
     const lost = __classPrivateFieldGet(this, _PlayerFinder_foundPlayers, "f").filter((player) => player.server.ip === server.ip);
     __classPrivateFieldSet(this, _PlayerFinder_foundPlayers, __classPrivateFieldGet(this, _PlayerFinder_foundPlayers, "f").filter((player) => player.server.ip !== server.ip), "f");
     if (lost.length > 0) {
         __classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_filterAndEmit).call(this, lost, 'lost');
     }
-    const notificationListener = __classPrivateFieldGet(this, _PlayerFinder_notificationListeners, "f")[server.ip];
-    if (notificationListener) {
-        notificationListener.removeAllListeners('notification');
-        notificationListener.removeAllListeners('disconnect');
-        delete __classPrivateFieldGet(this, _PlayerFinder_notificationListeners, "f")[server.ip];
-        if (notificationListener.isConnected()) {
-            await notificationListener.stop();
+    void (async () => {
+        const notificationListener = __classPrivateFieldGet(this, _PlayerFinder_notificationListeners, "f")[server.ip];
+        if (notificationListener) {
+            notificationListener.removeAllListeners('notification');
+            notificationListener.removeAllListeners('disconnect');
+            delete __classPrivateFieldGet(this, _PlayerFinder_notificationListeners, "f")[server.ip];
+            if (notificationListener.isConnected()) {
+                await notificationListener.stop();
+            }
         }
-    }
+    })();
 }, _PlayerFinder_removeAndEmitLostByPlayerId = function _PlayerFinder_removeAndEmitLostByPlayerId(id) {
     const foundIndex = __classPrivateFieldGet(this, _PlayerFinder_foundPlayers, "f").findIndex((player) => id === player.id);
     if (foundIndex >= 0) {
@@ -149,26 +152,28 @@ _PlayerFinder_status = new WeakMap(), _PlayerFinder_foundPlayers = new WeakMap()
     }
 }, _PlayerFinder_isPlayerConnected = function _PlayerFinder_isPlayerConnected(playerId, server) {
     return __classPrivateFieldGet(this, _PlayerFinder_foundPlayers, "f").findIndex((player) => (player.id === playerId) && (player.server.ip === server.ip)) >= 0;
-}, _PlayerFinder_handleNotification = async function _PlayerFinder_handleNotification(server, data) {
-    const { notification, playerId, params } = data;
-    if (notification === 'client' && playerId && params.length > 0) {
-        const type = (params[0] === 'new' || params[0] === 'reconnect') ? 'connect' :
-            params[0] === 'disconnect' ? 'disconnect' : null;
-        SqueezeliteMCContext_1.default.getLogger().info(`[squeezelite_mc] 'client' notification received from ${server.name} (${server.ip}); type is '${type}'`);
-        if (type === 'connect' && !__classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_isPlayerConnected).call(this, playerId, server)) {
-            __classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_removeAndEmitLostByPlayerId).call(this, playerId);
-            const players = await __classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_getPlayersOnServer).call(this, server);
-            const found = players.find((player) => player.id === playerId);
-            if (found) {
-                found.server = server;
-                __classPrivateFieldGet(this, _PlayerFinder_foundPlayers, "f").push(found);
-                __classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_filterAndEmit).call(this, [found], 'found');
+}, _PlayerFinder_handleNotification = function _PlayerFinder_handleNotification(server, data) {
+    void (async () => {
+        const { notification, playerId, params } = data;
+        if (notification === 'client' && playerId && params.length > 0) {
+            const type = (params[0] === 'new' || params[0] === 'reconnect') ? 'connect' :
+                params[0] === 'disconnect' ? 'disconnect' : null;
+            SqueezeliteMCContext_1.default.getLogger().info(`[squeezelite_mc] 'client' notification received from ${server.name} (${server.ip}); type is '${type}'`);
+            if (type === 'connect' && !__classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_isPlayerConnected).call(this, playerId, server)) {
+                __classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_removeAndEmitLostByPlayerId).call(this, playerId);
+                const players = await __classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_getPlayersOnServer).call(this, server);
+                const found = players.find((player) => player.id === playerId);
+                if (found) {
+                    found.server = server;
+                    __classPrivateFieldGet(this, _PlayerFinder_foundPlayers, "f").push(found);
+                    __classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_filterAndEmit).call(this, [found], 'found');
+                }
+            }
+            else if (type === 'disconnect') {
+                __classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_removeAndEmitLostByPlayerId).call(this, playerId);
             }
         }
-        else if (type === 'disconnect') {
-            __classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_removeAndEmitLostByPlayerId).call(this, playerId);
-        }
-    }
+    })();
 }, _PlayerFinder_filterAndEmit = function _PlayerFinder_filterAndEmit(players, eventName) {
     const eventFilter = __classPrivateFieldGet(this, _PlayerFinder_opts, "f").eventFilter;
     if (!eventFilter) {
@@ -229,4 +234,5 @@ _PlayerFinder_status = new WeakMap(), _PlayerFinder_foundPlayers = new WeakMap()
         ]
     ]);
 };
+exports.default = PlayerFinder;
 //# sourceMappingURL=PlayerFinder.js.map

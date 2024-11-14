@@ -3,8 +3,9 @@
 import libQ from 'kew';
 
 import os from 'os';
-import Server, { ServerCredentials } from './types/Server';
-import { BasicPlayerStartupParams } from './types/Player';
+import {type ServerCredentials} from './types/Server';
+import type Server from './types/Server';
+import { type BasicPlayerStartupParams } from './types/Player';
 import { SQUEEZELITE_LOG_FILE } from './System';
 
 const DSD_FORMAT_TO_SQUEEZELITE_OPT: Record<string, string> = {
@@ -68,7 +69,7 @@ export function jsPromiseToKew<T>(promise: Promise<T>): any {
   promise.then((result) => {
     defer.resolve(result);
   })
-    .catch((error) => {
+    .catch((error: unknown) => {
       defer.reject(error);
     });
 
@@ -77,7 +78,7 @@ export function jsPromiseToKew<T>(promise: Promise<T>): any {
 
 export function kewToJSPromise(promise: any): Promise<any> {
   // Guard against a JS promise from being passed to this function.
-  if (typeof promise.catch === 'function' && typeof promise.fail === undefined) {
+  if (typeof promise.catch === 'function' && typeof promise.fail === 'undefined') {
     // JS promise - return as is
     return promise;
   }
@@ -85,7 +86,7 @@ export function kewToJSPromise(promise: any): Promise<any> {
     promise.then((result: any) => {
       resolve(result);
     })
-      .fail((error: any) => {
+      .fail((error: Error) => {
         reject(error);
       });
   });

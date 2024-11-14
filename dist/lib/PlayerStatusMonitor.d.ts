@@ -1,7 +1,7 @@
-/// <reference types="node" />
 import EventEmitter from 'events';
-import Player, { PlayerStatus } from './types/Player';
-import { ServerCredentials } from './types/Server';
+import { type PlayerStatus } from './types/Player';
+import type Player from './types/Player';
+import { type ServerCredentials } from './types/Server';
 export default class PlayerStatusMonitor extends EventEmitter {
     #private;
     constructor(player: Player, serverCredentials: ServerCredentials);

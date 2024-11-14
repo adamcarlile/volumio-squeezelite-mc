@@ -82,6 +82,6 @@ class CommandDispatcher {
         ]);
     }
 }
-exports.default = CommandDispatcher;
 _CommandDispatcher_playerId = new WeakMap(), _CommandDispatcher_rpcConnectParams = new WeakMap();
+exports.default = CommandDispatcher;
 //# sourceMappingURL=CommandDispatcher.js.map

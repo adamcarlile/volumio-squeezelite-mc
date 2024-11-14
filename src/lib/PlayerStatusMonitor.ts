@@ -1,11 +1,11 @@
 import EventEmitter from 'events';
 import sm from './SqueezeliteMCContext';
-import { Notification, NotificationListener } from 'lms-cli-notifications';
-import Player, { PlayerStatus } from './types/Player';
-import { ServerCredentials } from './types/Server';
+import { type Notification, NotificationListener } from 'lms-cli-notifications';
+import {type PlayerStatus} from './types/Player';
+import type Player from './types/Player';
+import { type ServerCredentials } from './types/Server';
 import { getServerConnectParams } from './Util';
 import { sendRpcRequest } from './RPC';
-import { AbortController } from 'node-abort-controller';
 
 export default class PlayerStatusMonitor extends EventEmitter {
   #player: Player;
@@ -45,7 +45,14 @@ export default class PlayerStatusMonitor extends EventEmitter {
   }
 
   requestUpdate() {
-    this.#getStatusAndEmit();
+    this.#getStatusAndEmit()
+      .catch((error: unknown) => {
+        this.#stdLogError('#getStatusAndEmit()', error);
+      });
+  }
+
+  #stdLogError(fn: string, error: unknown, stack = false) {
+    sm.getLogger().error(sm.getErrorMessage(`[squeezelite_mc] Caught error in ${fn}:`, error, stack));
   }
 
   #handleDisconnect() {
@@ -90,10 +97,19 @@ export default class PlayerStatusMonitor extends EventEmitter {
     if (data.playerId === this.#player.id || data.notification === 'sync' ||
       (this.#syncMaster && data.playerId === this.#syncMaster)) {
       this.#abortCurrentAndPendingStatusRequest();
-      preRequestStatus.finally(() => {
-        this.#abortCurrentAndPendingStatusRequest();
-        this.#statusRequestTimer = setTimeout(this.#getStatusAndEmit.bind(this), 200);
-      });
+      preRequestStatus
+        .catch((error: unknown) => {
+          this.#stdLogError('preRequestStatus', error);
+        })
+        .finally(() => {
+          this.#abortCurrentAndPendingStatusRequest();
+          this.#statusRequestTimer = setTimeout(() => {
+            this.#getStatusAndEmit()
+              .catch((error: unknown) => {
+                this.#stdLogError('#getStatusAndEmit()', error);
+              });
+          }, 200);
+        });
     }
   }
 

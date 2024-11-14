@@ -1,4 +1,4 @@
-import { PlayerStartupParams } from './types/Player';
+import { type PlayerStartupParams } from './types/Player';
 export declare const SQUEEZELITE_LOG_FILE = "/tmp/squeezelite.log";
 export declare class SystemError extends Error {
     code?: SystemErrorCode;

@@ -1,4 +1,4 @@
-import { ServerCredentials } from './types/Server';
+import { type ServerCredentials } from './types/Server';
 export declare enum ProxyStatus {
     Stopped = "stopped",
     Started = "started",

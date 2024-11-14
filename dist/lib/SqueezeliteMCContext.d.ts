@@ -1,6 +1,6 @@
-import I18nSchema from '../i18n/strings_en.json';
-import winston from 'winston';
-import { PluginConfigKey, PluginConfigValue } from './Config';
+import type I18nSchema from '../i18n/strings_en.json';
+import type winston from 'winston';
+import { type PluginConfigKey, type PluginConfigValue } from './Config';
 export type I18nKey = keyof typeof I18nSchema;
 declare class SqueezeliteMCContext {
     #private;
@@ -14,7 +14,7 @@ declare class SqueezeliteMCContext {
     refreshUIConfig(): any;
     getLogger(): winston.Logger;
     getErrorMessage(message: string, error: any, stack?: boolean): string;
-    hasConfigKey<T extends PluginConfigKey>(key: T): boolean;
+    hasConfigKey(key: PluginConfigKey): boolean;
     getConfigValue<T extends PluginConfigKey>(key: T, getDefault?: boolean): PluginConfigValue<T>;
     deleteConfigValue(key: string): void;
     setConfigValue<T extends PluginConfigKey>(key: T, value: PluginConfigValue<T>): void;

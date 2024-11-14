@@ -1,6 +1,5 @@
-/// <reference types="node" />
 import EventEmitter from 'events';
-import { ServerCredentials } from './types/Server';
+import { type ServerCredentials } from './types/Server';
 export declare enum PlayerFinderStatus {
     Started = "started",
     Stopped = "stopped"
@@ -16,7 +15,7 @@ export interface PlayerFinderOptions {
 export default class PlayerFinder extends EventEmitter {
     #private;
     constructor();
-    start(opts?: PlayerFinderOptions): Promise<void>;
+    start(opts?: PlayerFinderOptions): void;
     stop(): Promise<void>;
     getStatus(): PlayerFinderStatus;
 }

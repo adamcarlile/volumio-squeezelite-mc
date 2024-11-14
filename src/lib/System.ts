@@ -2,7 +2,7 @@ import path from 'path';
 import sm from './SqueezeliteMCContext';
 import { exec } from 'child_process';
 import * as fs from 'fs';
-import { AlsaConfig, PlayerStartupParams } from './types/Player';
+import { type AlsaConfig, type PlayerStartupParams } from './types/Player';
 import { basicPlayerStartupParamsToSqueezeliteOpts } from './Util';
 
 const SYSTEMD_TEMPLATE_FILE = `${path.resolve(__dirname)}/../templates/systemd/squeezelite.service.template`;
@@ -68,32 +68,34 @@ function resolveOnSqueezeliteServiceStatusMatch(status: string | string[], match
   let tryCount = 0;
 
   const startCheckTimer = (resolve: (value?: unknown) => void, reject: () => void) => {
-    setTimeout(async () => {
-      const _status = await getSqueezeliteServiceStatus();
-      if (Array.isArray(status) ? status.includes(_status) : _status === status) {
-        consecutiveCount++;
-        if (consecutiveCount === matchConsecutive) {
-          resolve();
+    setTimeout(() => {
+      void (async () => {
+        const _status = await getSqueezeliteServiceStatus();
+        if (Array.isArray(status) ? status.includes(_status) : _status === status) {
+          consecutiveCount++;
+          if (consecutiveCount === matchConsecutive) {
+            resolve();
+          }
+          else {
+            startCheckTimer(resolve, reject);
+          }
         }
-        else {
+        else if (_status === 'failed') {
+          reject();
+        }
+        else if (_status === 'activating') {
+          consecutiveCount = 0;
           startCheckTimer(resolve, reject);
         }
-      }
-      else if (_status === 'failed') {
-        reject();
-      }
-      else if (_status === 'activating') {
-        consecutiveCount = 0;
-        startCheckTimer(resolve, reject);
-      }
-      else if (tryCount < retries - 1) {
-        consecutiveCount = 0;
-        tryCount++;
-        startCheckTimer(resolve, reject);
-      }
-      else {
-        reject();
-      }
+        else if (tryCount < retries - 1) {
+          consecutiveCount = 0;
+          tryCount++;
+          startCheckTimer(resolve, reject);
+        }
+        else {
+          reject();
+        }  
+      })();
     }, 500);
   };
 
@@ -106,7 +108,7 @@ function resolveOnSqueezeliteServiceStatusMatch(status: string | string[], match
 async function updateSqueezeliteService(params: PlayerStartupParams) {
   const startupOpts = params.type === 'basic' ? basicPlayerStartupParamsToSqueezeliteOpts(params) : params.startupOptions;
   const template = fs.readFileSync(SYSTEMD_TEMPLATE_FILE).toString();
-  /* eslint-disable-next-line no-template-curly-in-string */
+   
   const out = template.replace('${STARTUP_OPTS}', startupOpts);
   fs.writeFileSync(`${SYSTEMD_TEMPLATE_FILE}.out`, out);
   const cpCmd = `cp ${SYSTEMD_TEMPLATE_FILE}.out ${SYSTEMD_SERVICE_FILE}`;
@@ -127,7 +129,7 @@ async function updateAlsaConf(conf: AlsaConfig) {
   else {
     ctl = '';
   }
-  // eslint-disable-next-line no-template-curly-in-string
+   
   const out = template.replace('${CTL}', ctl);
   fs.writeFileSync(`${ALSA_CONF_TEMPLATE_FILE}.out`, out);
   const cpCmd = `cp ${ALSA_CONF_TEMPLATE_FILE}.out ${ALSA_CONF_FILE}`;

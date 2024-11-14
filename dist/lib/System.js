@@ -26,7 +26,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getAlsaFormats = exports.getSqueezeliteServiceStatus = exports.stopSqueezeliteService = exports.initSqueezeliteService = exports.SystemErrorCode = exports.SystemError = exports.SQUEEZELITE_LOG_FILE = void 0;
+exports.SystemErrorCode = exports.SystemError = exports.SQUEEZELITE_LOG_FILE = void 0;
+exports.initSqueezeliteService = initSqueezeliteService;
+exports.stopSqueezeliteService = stopSqueezeliteService;
+exports.getSqueezeliteServiceStatus = getSqueezeliteServiceStatus;
+exports.getAlsaFormats = getAlsaFormats;
 const path_1 = __importDefault(require("path"));
 const SqueezeliteMCContext_1 = __importDefault(require("./SqueezeliteMCContext"));
 const child_process_1 = require("child_process");
@@ -43,7 +47,7 @@ exports.SystemError = SystemError;
 var SystemErrorCode;
 (function (SystemErrorCode) {
     SystemErrorCode[SystemErrorCode["DeviceBusy"] = -1] = "DeviceBusy";
-})(SystemErrorCode = exports.SystemErrorCode || (exports.SystemErrorCode = {}));
+})(SystemErrorCode || (exports.SystemErrorCode = SystemErrorCode = {}));
 function execCommand(cmd, sudo = false) {
     return new Promise((resolve, reject) => {
         SqueezeliteMCContext_1.default.getLogger().info(`[squeezelite_mc] Executing ${cmd}`);
@@ -88,32 +92,34 @@ function resolveOnSqueezeliteServiceStatusMatch(status, matchConsecutive = 1, re
     let consecutiveCount = 0;
     let tryCount = 0;
     const startCheckTimer = (resolve, reject) => {
-        setTimeout(async () => {
-            const _status = await getSqueezeliteServiceStatus();
-            if (Array.isArray(status) ? status.includes(_status) : _status === status) {
-                consecutiveCount++;
-                if (consecutiveCount === matchConsecutive) {
-                    resolve();
+        setTimeout(() => {
+            void (async () => {
+                const _status = await getSqueezeliteServiceStatus();
+                if (Array.isArray(status) ? status.includes(_status) : _status === status) {
+                    consecutiveCount++;
+                    if (consecutiveCount === matchConsecutive) {
+                        resolve();
+                    }
+                    else {
+                        startCheckTimer(resolve, reject);
+                    }
                 }
-                else {
+                else if (_status === 'failed') {
+                    reject();
+                }
+                else if (_status === 'activating') {
+                    consecutiveCount = 0;
                     startCheckTimer(resolve, reject);
                 }
-            }
-            else if (_status === 'failed') {
-                reject();
-            }
-            else if (_status === 'activating') {
-                consecutiveCount = 0;
-                startCheckTimer(resolve, reject);
-            }
-            else if (tryCount < retries - 1) {
-                consecutiveCount = 0;
-                tryCount++;
-                startCheckTimer(resolve, reject);
-            }
-            else {
-                reject();
-            }
+                else if (tryCount < retries - 1) {
+                    consecutiveCount = 0;
+                    tryCount++;
+                    startCheckTimer(resolve, reject);
+                }
+                else {
+                    reject();
+                }
+            })();
         }, 500);
     };
     return new Promise((resolve, reject) => {
@@ -123,7 +129,6 @@ function resolveOnSqueezeliteServiceStatusMatch(status, matchConsecutive = 1, re
 async function updateSqueezeliteService(params) {
     const startupOpts = params.type === 'basic' ? (0, Util_1.basicPlayerStartupParamsToSqueezeliteOpts)(params) : params.startupOptions;
     const template = fs.readFileSync(SYSTEMD_TEMPLATE_FILE).toString();
-    /* eslint-disable-next-line no-template-curly-in-string */
     const out = template.replace('${STARTUP_OPTS}', startupOpts);
     fs.writeFileSync(`${SYSTEMD_TEMPLATE_FILE}.out`, out);
     const cpCmd = `cp ${SYSTEMD_TEMPLATE_FILE}.out ${SYSTEMD_SERVICE_FILE}`;
@@ -143,7 +148,6 @@ async function updateAlsaConf(conf) {
     else {
         ctl = '';
     }
-    // eslint-disable-next-line no-template-curly-in-string
     const out = template.replace('${CTL}', ctl);
     fs.writeFileSync(`${ALSA_CONF_TEMPLATE_FILE}.out`, out);
     const cpCmd = `cp ${ALSA_CONF_TEMPLATE_FILE}.out ${ALSA_CONF_FILE}`;
@@ -157,12 +161,10 @@ async function initSqueezeliteService(params) {
     await systemctl('daemon-reload');
     return restartSqueezeliteService();
 }
-exports.initSqueezeliteService = initSqueezeliteService;
 async function stopSqueezeliteService() {
     await systemctl('stop', 'squeezelite');
     return resolveOnSqueezeliteServiceStatusMatch(['inactive', 'failed']);
 }
-exports.stopSqueezeliteService = stopSqueezeliteService;
 async function getSqueezeliteServiceStatus() {
     const recognizedStatuses = ['inactive', 'active', 'activating', 'failed'];
     const regex = /Active: (.*) \(.*\)/gm;
@@ -173,7 +175,6 @@ async function getSqueezeliteServiceStatus() {
     }
     return 'inactive';
 }
-exports.getSqueezeliteServiceStatus = getSqueezeliteServiceStatus;
 async function getAlsaFormats(card) {
     //Const cmd = `aplay -D hw:${card} --nonblock -f MPEG /dev/zero  2>&1 | sed -e '1,/Available formats:/d' | awk -F'-' '{print $2}' | awk '{$1=$1}1'`;
     const regExFormatsList = /Available formats:\n(.*)/gms;
@@ -199,5 +200,4 @@ async function getAlsaFormats(card) {
         return [];
     }
 }
-exports.getAlsaFormats = getAlsaFormats;
 //# sourceMappingURL=System.js.map

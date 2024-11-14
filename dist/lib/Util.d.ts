@@ -1,5 +1,6 @@
-import Server, { ServerCredentials } from './types/Server';
-import { BasicPlayerStartupParams } from './types/Player';
+import { type ServerCredentials } from './types/Server';
+import type Server from './types/Server';
+import { type BasicPlayerStartupParams } from './types/Player';
 export interface ServerConnectParams {
     host?: string;
     port?: string;
