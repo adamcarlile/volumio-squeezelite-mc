@@ -6,7 +6,7 @@ Squeezelite is a client player for the Logitech Media Server. The plugin install
 
 Before installing this plugin, ensure there are no other Squeezelite plugins or binaries installed on the system.
 
-This plugin has been tested to work with Logitech Media Server v8.2.1.
+This plugin has been tested to work with Logitech Media Server v8.5.2.
 
 ## Getting Started
 
@@ -38,6 +38,9 @@ In the plugin settings, you can configure the following:
 - If you try to play a track belonging to another music service at a time when Squeezelite is already playing something, you will likely encounter a "Device or resource busy" error. What happens is, the plugin will tell Squeezelite to stop playback, but there is at least a 1-second delay before the output device is actually released. Since there is no mechanism for the plugin to inform Volumio of this delay, Volumio will just instruct the next music service to start playback immediately. If the output device is still being occupied by Squeezelite (very likely to be the case), then the "Device or resource busy" error will occur. You should therefore pause or stop the Squeezelite playback and wait approximately one second before moving on to another music service.
 
 ## Changelog
+
+2.0.0
+- Release for Bookworm-based Volumio
 
 1.0.4
 - Fix: install on RPi 5
