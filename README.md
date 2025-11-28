@@ -6,18 +6,29 @@ A plugin that installs and runs Squeezelite with (M)onitoring and (C)ontrol. Aim
 
 Squeezelite is a client player for the Logitech Media Server. The plugin installs the Squeezelite binary obtained from the [LMS Clients](https://sourceforge.net/projects/lmsclients/) repo.
 
+**Music Assistant Compatibility**: This plugin also works with [Music Assistant](https://music-assistant.io/) servers that emulate the Logitech Media Server protocol. The plugin automatically detects Music Assistant servers and adapts its communication method accordingly.
+
 Before installing this plugin, ensure there are no other Squeezelite plugins or binaries installed on the system.
 
-This plugin has been tested to work with Logitech Media Server v8.5.2.
+This plugin has been tested to work with Logitech Media Server v8.5.2 and Music Assistant.
 
 ## Getting Started
 
-The following instructions assume you have at least one working Logitech Media Server running on your network.
+The following instructions assume you have at least one working Logitech Media Server or Music Assistant server running on your network.
 
 1. Install the Squeezelite MC plugin from Volumio plugin store.
 2. Enable the plugin. Volumio will notify you when Squeezelite has started.
-3. Access the web interface of Logitech Media Server. If you have multiple client players on the network, choose the one that shows Volumio's hostname -- this is the default player name assigned to Squeezelite running on Volumio (configurable in the plugin settings).
+3. Access the web interface of your Logitech Media Server or Music Assistant. If you have multiple client players on the network, choose the one that shows Volumio's hostname -- this is the default player name assigned to Squeezelite running on Volumio (configurable in the plugin settings).
 4. When you play a song, Volumio should display its cover art, title, artist, etc.
+
+## Server Compatibility
+
+The plugin automatically detects whether it's connecting to a Logitech Media Server or Music Assistant server and adapts accordingly:
+
+- **Logitech Media Server**: Uses real-time subscription-based updates for optimal performance
+- **Music Assistant**: Uses polling-based updates (every 1 second) as Music Assistant doesn't support all LMS subscription commands
+
+No manual configuration is required - the detection and adaptation happens automatically when the plugin starts.
 
 ## Configuration
 

@@ -252,9 +252,14 @@ export default class PlayerStatusMonitor extends EventEmitter {
   }
 
   #parsePlayerStatusResult(data: any) {
+    // Debug logging to see what data we're getting
+    if (this.#serverType === 'music-assistant') {
+      sm.getLogger().debug(`[squeezelite_mc] Music Assistant status data: ${JSON.stringify(data)}`);
+    }
+    
     const result: PlayerStatus = {
       mode: data.mode,
-      time: data.time,
+      time: data.time !== undefined ? Number(data.time) : undefined,
       volume: data['mixer volume'],
       repeatMode: data['playlist repeat'],
       shuffleMode: data['playlist shuffle'],
