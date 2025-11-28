@@ -127,13 +127,15 @@ _Proxy_serverCredentials = new WeakMap(), _Proxy_server = new WeakMap(), _Proxy_
      * one with the correct, untampered value.
      */
     if (typeof url !== 'string' || !__classPrivateFieldGet(this, _Proxy_instances, "m", _Proxy_validateURL).call(this, url)) {
-        SqueezeliteMCContext_1.default.getLogger().error(`[squeezelite_mc] Proxy: invalid URL (${String(url)})`);
+        const urlStr = typeof url === 'string' ? url : JSON.stringify(url);
+        SqueezeliteMCContext_1.default.getLogger().error(`[squeezelite_mc] Proxy: invalid URL (${urlStr})`);
         return res.status(400).end();
     }
     void (async () => {
-        SqueezeliteMCContext_1.default.getLogger().info(`[squeezelite_mc] Proxy request for ${String(serverName)}, URL: ${url}`);
+        const serverNameStr = typeof serverName === 'string' ? serverName : (serverName ? JSON.stringify(serverName) : 'unknown');
+        SqueezeliteMCContext_1.default.getLogger().info(`[squeezelite_mc] Proxy request for ${serverNameStr}, URL: ${url}`);
         const headers = {};
-        const credentials = serverName ? __classPrivateFieldGet(this, _Proxy_serverCredentials, "f")[serverName.toString()] : null;
+        const credentials = typeof serverName === 'string' ? __classPrivateFieldGet(this, _Proxy_serverCredentials, "f")[serverName] : null;
         if (credentials) {
             headers.Authorization = `Basic ${(0, Util_1.encodeBase64)(`${credentials.username}:${credentials.password || ''}`)}`;
         }
