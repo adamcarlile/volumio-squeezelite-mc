@@ -7,6 +7,8 @@ import { type ServerCredentials } from './types/Server';
 import { getServerConnectParams } from './Util';
 import { sendRpcRequest } from './RPC';
 
+type ServerType = 'lms' | 'music-assistant' | 'unknown';
+
 export default class PlayerStatusMonitor extends EventEmitter {
   #player: Player;
   #serverCredentials: ServerCredentials;
@@ -14,6 +16,8 @@ export default class PlayerStatusMonitor extends EventEmitter {
   #statusRequestTimer: NodeJS.Timeout | null;
   #statusRequestController: AbortController | null;
   #syncMaster: string | null;
+  #serverType: ServerType;
+  #pollingInterval: NodeJS.Timeout | null;
 
   constructor(player: Player, serverCredentials: ServerCredentials) {
     super();
@@ -23,10 +27,23 @@ export default class PlayerStatusMonitor extends EventEmitter {
     this.#statusRequestTimer = null;
     this.#statusRequestController = null;
     this.#syncMaster = null;
+    this.#serverType = 'unknown';
+    this.#pollingInterval = null;
   }
 
   async start() {
-    this.#notificationListener = await this.#createAndStartNotificationListener();
+    // Detect server type first
+    this.#serverType = await this.#detectServerType();
+    sm.getLogger().info(`[squeezelite_mc] Detected server type: ${this.#serverType}`);
+
+    if (this.#serverType === 'music-assistant') {
+      // Use polling for Music Assistant
+      this.#startPolling();
+    } else {
+      // Use subscription for LMS
+      this.#notificationListener = await this.#createAndStartNotificationListener();
+    }
+    
     this.#syncMaster = (await this.#getPlayerSyncMaster()).syncMaster;
     if (this.#syncMaster) {
       sm.getLogger().info(`[squeezelite_mc] Squeezelite in sync group with sync master ${this.#syncMaster}.`);
@@ -37,6 +54,11 @@ export default class PlayerStatusMonitor extends EventEmitter {
   async stop() {
     if (this.#notificationListener) {
       await this.#notificationListener.stop();
+      this.#notificationListener = null;
+    }
+    if (this.#pollingInterval) {
+      clearInterval(this.#pollingInterval);
+      this.#pollingInterval = null;
     }
   }
 
@@ -55,15 +77,55 @@ export default class PlayerStatusMonitor extends EventEmitter {
     sm.getLogger().error(sm.getErrorMessage(`[squeezelite_mc] Caught error in ${fn}:`, error, stack));
   }
 
-  #handleDisconnect() {
-    if (!this.#notificationListener) {
-      return;
+  async #detectServerType(): Promise<ServerType> {
+    try {
+      const connectParams = getServerConnectParams(this.#player.server, this.#serverCredentials, 'rpc');
+      
+      // Check server status for UUID to identify Music Assistant
+      const serverStatusResult = await sendRpcRequest(connectParams, ['', ['serverstatus']]);
+      const uuid = serverStatusResult.result.uuid;
+      
+      if (uuid === 'aioslimproto') {
+        return 'music-assistant';
+      }
+      
+      // If UUID is not aioslimproto, assume it's LMS
+      return 'lms';
+    } catch (error) {
+      sm.getLogger().warn(`[squeezelite_mc] Could not detect server type: ${error}. Defaulting to LMS.`);
+      return 'lms';
     }
-    this.#notificationListener.removeAllListeners('notification');
-    this.#notificationListener.removeAllListeners('disconnect');
-    this.#notificationListener = null;
-    this.#abortCurrentAndPendingStatusRequest();
+  }
 
+  #startPolling() {
+    sm.getLogger().info('[squeezelite_mc] Starting polling mode for Music Assistant server');
+    
+    // Poll every 1000ms (1 second)
+    this.#pollingInterval = setInterval(() => {
+      this.#getStatusAndEmit().catch((error: unknown) => {
+        this.#stdLogError('#getStatusAndEmit() [polling]', error);
+      });
+    }, 1000);
+    
+    // Initial status request
+    this.#getStatusAndEmit().catch((error: unknown) => {
+      this.#stdLogError('#getStatusAndEmit() [initial polling]', error);
+    });
+  }
+
+  #handleDisconnect() {
+    if (this.#notificationListener) {
+      this.#notificationListener.removeAllListeners('notification');
+      this.#notificationListener.removeAllListeners('disconnect');
+      this.#notificationListener = null;
+    }
+    
+    if (this.#pollingInterval) {
+      clearInterval(this.#pollingInterval);
+      this.#pollingInterval = null;
+    }
+    
+    this.#abortCurrentAndPendingStatusRequest();
     this.emit('disconnect', this.#player);
   }
 
@@ -139,6 +201,10 @@ export default class PlayerStatusMonitor extends EventEmitter {
   }
 
   async #createAndStartNotificationListener() {
+    if (this.#serverType === 'music-assistant') {
+      throw new Error('Notification listener should not be used with Music Assistant');
+    }
+    
     const notificationListener = new NotificationListener({
       server: getServerConnectParams(this.#player.server, this.#serverCredentials, 'cli'),
       subscribe: [ 'play', 'stop', 'pause', 'playlist', 'mixer', 'sync' ]
