@@ -126,14 +126,16 @@ export default class Proxy {
      * one with the correct, untampered value.
      */
     if (typeof url !== 'string' || !this.#validateURL(url)) {
-      sm.getLogger().error(`[squeezelite_mc] Proxy: invalid URL (${String(url)})`);
+      const urlStr = typeof url === 'string' ? url : JSON.stringify(url);
+      sm.getLogger().error(`[squeezelite_mc] Proxy: invalid URL (${urlStr})`);
       return res.status(400).end();
     }
 
     void (async () => {
-      sm.getLogger().info(`[squeezelite_mc] Proxy request for ${String(serverName)}, URL: ${url}`);
+      const serverNameStr = typeof serverName === 'string' ? serverName : (serverName ? JSON.stringify(serverName) : 'unknown');
+      sm.getLogger().info(`[squeezelite_mc] Proxy request for ${serverNameStr}, URL: ${url}`);
       const headers: HeadersInit = {};
-      const credentials = serverName ? this.#serverCredentials[(serverName as any).toString()] : null;
+      const credentials = typeof serverName === 'string' ? this.#serverCredentials[serverName] : null;
       if (credentials) {
         headers.Authorization = `Basic ${encodeBase64(`${credentials.username}:${credentials.password || ''}`)}`;
       }

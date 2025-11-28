@@ -25,11 +25,11 @@ function execCommand(cmd: string, sudo = false) {
     sm.getLogger().info(`[squeezelite_mc] Executing ${cmd}`);
     exec(sudo ? `echo volumio | sudo -S ${cmd}` : cmd, { uid: 1000, gid: 1000 }, function (error, stdout, stderr) {
       if (error) {
-        sm.getLogger().error(sm.getErrorMessage(`[squeezelite_mc] Failed to execute ${cmd}: ${stderr.toString()}`, error));
+        sm.getLogger().error(sm.getErrorMessage(`[squeezelite_mc] Failed to execute ${cmd}: ${stderr}`, error));
         reject(error);
       }
       else {
-        resolve(stdout.toString());
+        resolve(stdout);
       }
     });
   });

@@ -92,7 +92,7 @@ export default class PlayerStatusMonitor extends EventEmitter {
       // If UUID is not aioslimproto, assume it's LMS
       return 'lms';
     } catch (error) {
-      sm.getLogger().warn(`[squeezelite_mc] Could not detect server type: ${error}. Defaulting to LMS.`);
+      sm.getLogger().warn(`[squeezelite_mc] Could not detect server type: ${String(error)}. Defaulting to LMS.`);
       return 'lms';
     }
   }
