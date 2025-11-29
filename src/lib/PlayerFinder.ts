@@ -115,7 +115,15 @@ export default class PlayerFinder extends EventEmitter {
     sm.getLogger().info(`[squeezelite_mc] Server discovered: ${JSON.stringify(server)}`);
 
     try {
-      this.#notificationListeners[server.ip] = await this.#createAndStartNotificationListener(server);
+      // Try to create notification listener, but continue even if it fails
+      // (e.g., Music Assistant may not support CLI notifications properly)
+      try {
+        this.#notificationListeners[server.ip] = await this.#createAndStartNotificationListener(server);
+      }
+      catch (listenerError) {
+        sm.getLogger().warn(sm.getErrorMessage('[squeezelite_mc] Failed to create notification listener for server, will rely on polling: ', listenerError));
+      }
+
       const players = await this.#getPlayersOnServer(server);
       // During await #getPlayersOnServer(), notificationListener could have detected player connections and
       // Added them to the list of found players. We need to filter them out.

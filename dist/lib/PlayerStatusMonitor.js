@@ -54,7 +54,15 @@ class PlayerStatusMonitor extends events_1.default {
         }
         else {
             // Use notification listener for standard LMS
-            __classPrivateFieldSet(this, _PlayerStatusMonitor_notificationListener, await __classPrivateFieldGet(this, _PlayerStatusMonitor_instances, "m", _PlayerStatusMonitor_createAndStartNotificationListener).call(this), "f");
+            try {
+                __classPrivateFieldSet(this, _PlayerStatusMonitor_notificationListener, await __classPrivateFieldGet(this, _PlayerStatusMonitor_instances, "m", _PlayerStatusMonitor_createAndStartNotificationListener).call(this), "f");
+            }
+            catch (error) {
+                SqueezeliteMCContext_1.default.getLogger().error(SqueezeliteMCContext_1.default.getErrorMessage('[squeezelite_mc] Failed to start notification listener, falling back to polling mode: ', error));
+                // Fall back to polling if notification listener fails (e.g., Music Assistant not detected properly)
+                __classPrivateFieldSet(this, _PlayerStatusMonitor_isMusicAssistant, true, "f");
+                __classPrivateFieldGet(this, _PlayerStatusMonitor_instances, "m", _PlayerStatusMonitor_startPolling).call(this);
+            }
         }
         __classPrivateFieldSet(this, _PlayerStatusMonitor_syncMaster, (await __classPrivateFieldGet(this, _PlayerStatusMonitor_instances, "m", _PlayerStatusMonitor_getPlayerSyncMaster).call(this)).syncMaster, "f");
         if (__classPrivateFieldGet(this, _PlayerStatusMonitor_syncMaster, "f")) {
@@ -169,21 +177,38 @@ _PlayerStatusMonitor_player = new WeakMap(), _PlayerStatusMonitor_serverCredenti
     return notificationListener;
 }, _PlayerStatusMonitor_detectMusicAssistant = async function _PlayerStatusMonitor_detectMusicAssistant() {
     const connectParams = (0, Util_1.getServerConnectParams)(__classPrivateFieldGet(this, _PlayerStatusMonitor_player, "f").server, __classPrivateFieldGet(this, _PlayerStatusMonitor_serverCredentials, "f"), 'rpc');
-    try {
-        const response = await (0, RPC_1.sendRpcRequest)(connectParams, [
-            '',
-            ['serverstatus']
-        ]);
-        if (response.result && response.result.uuid === 'aioslimproto') {
-            return true;
+    // Add timeout and retry logic for more robust detection
+    const maxRetries = 3;
+    const retryDelay = 1000; // 1 second
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const controller = new node_abort_controller_1.AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+            const response = await (0, RPC_1.sendRpcRequest)(connectParams, [
+                '',
+                ['serverstatus']
+            ], controller);
+            clearTimeout(timeoutId);
+            if (response.result && response.result.uuid === 'aioslimproto') {
+                SqueezeliteMCContext_1.default.getLogger().info('[squeezelite_mc] Server identified as Music Assistant');
+                return true;
+            }
+            SqueezeliteMCContext_1.default.getLogger().info('[squeezelite_mc] Server identified as standard LMS');
+            return false;
         }
-        return false;
+        catch (error) {
+            if (attempt < maxRetries) {
+                SqueezeliteMCContext_1.default.getLogger().warn(`[squeezelite_mc] Error detecting server type (attempt ${attempt}/${maxRetries}), retrying...`);
+                await new Promise((resolve) => setTimeout(resolve, retryDelay));
+            }
+            else {
+                SqueezeliteMCContext_1.default.getLogger().error(SqueezeliteMCContext_1.default.getErrorMessage('[squeezelite_mc] Error detecting server type after multiple attempts: ', error));
+                // Default to standard LMS behavior on error
+                return false;
+            }
+        }
     }
-    catch (error) {
-        SqueezeliteMCContext_1.default.getLogger().error(SqueezeliteMCContext_1.default.getErrorMessage('[squeezelite_mc] Error detecting server type: ', error));
-        // Default to standard LMS behavior on error
-        return false;
-    }
+    return false;
 }, _PlayerStatusMonitor_startPolling = function _PlayerStatusMonitor_startPolling() {
     if (__classPrivateFieldGet(this, _PlayerStatusMonitor_pollingInterval, "f")) {
         clearInterval(__classPrivateFieldGet(this, _PlayerStatusMonitor_pollingInterval, "f"));

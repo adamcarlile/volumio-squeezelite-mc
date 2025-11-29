@@ -42,7 +42,15 @@ export default class PlayerStatusMonitor extends EventEmitter {
     }
     else {
       // Use notification listener for standard LMS
-      this.#notificationListener = await this.#createAndStartNotificationListener();
+      try {
+        this.#notificationListener = await this.#createAndStartNotificationListener();
+      }
+      catch (error) {
+        sm.getLogger().error(sm.getErrorMessage('[squeezelite_mc] Failed to start notification listener, falling back to polling mode: ', error));
+        // Fall back to polling if notification listener fails (e.g., Music Assistant not detected properly)
+        this.#isMusicAssistant = true;
+        this.#startPolling();
+      }
     }
 
     this.#syncMaster = (await this.#getPlayerSyncMaster()).syncMaster;
@@ -171,22 +179,43 @@ export default class PlayerStatusMonitor extends EventEmitter {
 
   async #detectMusicAssistant() {
     const connectParams = getServerConnectParams(this.#player.server, this.#serverCredentials, 'rpc');
-    try {
-      const response = await sendRpcRequest(connectParams, [
-        '',
-        [ 'serverstatus' ]
-      ]);
 
-      if (response.result && response.result.uuid === 'aioslimproto') {
-        return true;
+    // Add timeout and retry logic for more robust detection
+    const maxRetries = 3;
+    const retryDelay = 1000; // 1 second
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+        const response = await sendRpcRequest(connectParams, [
+          '',
+          [ 'serverstatus' ]
+        ], controller);
+
+        clearTimeout(timeoutId);
+
+        if (response.result && response.result.uuid === 'aioslimproto') {
+          sm.getLogger().info('[squeezelite_mc] Server identified as Music Assistant');
+          return true;
+        }
+        sm.getLogger().info('[squeezelite_mc] Server identified as standard LMS');
+        return false;
       }
-      return false;
+      catch (error) {
+        if (attempt < maxRetries) {
+          sm.getLogger().warn(`[squeezelite_mc] Error detecting server type (attempt ${attempt}/${maxRetries}), retrying...`);
+          await new Promise((resolve) => setTimeout(resolve, retryDelay));
+        }
+        else {
+          sm.getLogger().error(sm.getErrorMessage('[squeezelite_mc] Error detecting server type after multiple attempts: ', error));
+          // Default to standard LMS behavior on error
+          return false;
+        }
+      }
     }
-    catch (error) {
-      sm.getLogger().error(sm.getErrorMessage('[squeezelite_mc] Error detecting server type: ', error));
-      // Default to standard LMS behavior on error
-      return false;
-    }
+    return false;
   }
 
   #startPolling() {

@@ -112,7 +112,14 @@ _PlayerFinder_status = new WeakMap(), _PlayerFinder_foundPlayers = new WeakMap()
     };
     SqueezeliteMCContext_1.default.getLogger().info(`[squeezelite_mc] Server discovered: ${JSON.stringify(server)}`);
     try {
-        __classPrivateFieldGet(this, _PlayerFinder_notificationListeners, "f")[server.ip] = await __classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_createAndStartNotificationListener).call(this, server);
+        // Try to create notification listener, but continue even if it fails
+        // (e.g., Music Assistant may not support CLI notifications properly)
+        try {
+            __classPrivateFieldGet(this, _PlayerFinder_notificationListeners, "f")[server.ip] = await __classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_createAndStartNotificationListener).call(this, server);
+        }
+        catch (listenerError) {
+            SqueezeliteMCContext_1.default.getLogger().warn(SqueezeliteMCContext_1.default.getErrorMessage('[squeezelite_mc] Failed to create notification listener for server, will rely on polling: ', listenerError));
+        }
         const players = await __classPrivateFieldGet(this, _PlayerFinder_instances, "m", _PlayerFinder_getPlayersOnServer).call(this, server);
         // During await #getPlayersOnServer(), notificationListener could have detected player connections and
         // Added them to the list of found players. We need to filter them out.
