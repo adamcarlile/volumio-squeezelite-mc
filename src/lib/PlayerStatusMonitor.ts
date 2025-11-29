@@ -123,14 +123,28 @@ export default class PlayerStatusMonitor extends EventEmitter {
     this.#abortCurrentAndPendingStatusRequest();
     this.#statusRequestController = new AbortController();
 
-    const playerStatus = await this.#requestPlayerStatus(this.#statusRequestController);
-    if (playerStatus._requestAborted !== undefined && playerStatus._requestAborted) {
-      return;
+    try {
+      const playerStatus = await this.#requestPlayerStatus(this.#statusRequestController);
+      if (playerStatus._requestAborted !== undefined && playerStatus._requestAborted) {
+        return;
+      }
+
+      // Check if we got a valid result
+      if (!playerStatus.result) {
+        sm.getLogger().warn('[squeezelite_mc] Player status request returned no result.');
+        return;
+      }
+
+      // For Music Assistant, ensure we parse the result even when in a sync group
+      // The status command should return the correct information including sync state
+      this.emit('update', {
+        player: this.#player,
+        status: this.#parsePlayerStatusResult(playerStatus.result)
+      });
     }
-    this.emit('update', {
-      player: this.#player,
-      status: this.#parsePlayerStatusResult(playerStatus.result)
-    });
+    catch (error) {
+      sm.getLogger().error(sm.getErrorMessage('[squeezelite_mc] Error getting player status: ', error));
+    }
   }
 
   #abortCurrentAndPendingStatusRequest() {
@@ -180,7 +194,23 @@ export default class PlayerStatusMonitor extends EventEmitter {
       clearInterval(this.#pollingInterval);
     }
     this.#pollingInterval = setInterval(async () => {
-      await this.#getStatusAndEmit();
+      try {
+        // Check for sync master changes when using Music Assistant
+        const syncResult = await this.#getPlayerSyncMaster();
+        if (syncResult.syncMaster !== this.#syncMaster) {
+          if (syncResult.syncMaster) {
+            sm.getLogger().info(`[squeezelite_mc] Squeezelite sync master changed to ${syncResult.syncMaster}.`);
+          }
+          else if (this.#syncMaster) {
+            sm.getLogger().info('[squeezelite_mc] Squeezelite removed from sync group.');
+          }
+          this.#syncMaster = syncResult.syncMaster;
+        }
+        await this.#getStatusAndEmit();
+      }
+      catch (error) {
+        sm.getLogger().error(sm.getErrorMessage('[squeezelite_mc] Error in polling loop: ', error));
+      }
     }, this.#pollingIntervalMs);
   }
 
@@ -221,8 +251,20 @@ export default class PlayerStatusMonitor extends EventEmitter {
   }
 
   #parsePlayerStatusResult(data: any) {
+    if (!data) {
+      sm.getLogger().warn('[squeezelite_mc] Received null or undefined data in parsePlayerStatusResult');
+      return {
+        mode: 'stop',
+        time: 0,
+        volume: 0,
+        repeatMode: 0,
+        shuffleMode: 0,
+        canSeek: 0
+      } as PlayerStatus;
+    }
+
     const result: PlayerStatus = {
-      mode: data.mode,
+      mode: data.mode || 'stop',
       time: data.time,
       volume: data['mixer volume'],
       repeatMode: data['playlist repeat'],
@@ -230,23 +272,26 @@ export default class PlayerStatusMonitor extends EventEmitter {
       canSeek: data['can_seek']
     };
 
-    const track = data.playlist_loop[0];
-    if (track) {
-      result.currentTrack = {
-        type: track.type,
-        title: track.title,
-        artist: track.artist,
-        trackArtist: track.trackartist,
-        albumArtist: track.albumartist,
-        album: track.album,
-        remoteTitle: track.remote_title,
-        artworkUrl: track.artwork_url,
-        coverArt: track.coverart,
-        duration: track.duration,
-        sampleRate: track.samplerate,
-        sampleSize: track.samplesize,
-        bitrate: track.bitrate
-      };
+    // Safely check for playlist_loop array and first track
+    if (data.playlist_loop && Array.isArray(data.playlist_loop) && data.playlist_loop.length > 0) {
+      const track = data.playlist_loop[0];
+      if (track) {
+        result.currentTrack = {
+          type: track.type,
+          title: track.title,
+          artist: track.artist,
+          trackArtist: track.trackartist,
+          albumArtist: track.albumartist,
+          album: track.album,
+          remoteTitle: track.remote_title,
+          artworkUrl: track.artwork_url,
+          coverArt: track.coverart,
+          duration: track.duration,
+          sampleRate: track.samplerate,
+          sampleSize: track.samplesize,
+          bitrate: track.bitrate
+        };
+      }
     }
 
     return result;

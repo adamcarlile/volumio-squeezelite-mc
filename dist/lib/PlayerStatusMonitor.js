@@ -129,14 +129,26 @@ _PlayerStatusMonitor_player = new WeakMap(), _PlayerStatusMonitor_serverCredenti
 }, _PlayerStatusMonitor_getStatusAndEmit = async function _PlayerStatusMonitor_getStatusAndEmit() {
     __classPrivateFieldGet(this, _PlayerStatusMonitor_instances, "m", _PlayerStatusMonitor_abortCurrentAndPendingStatusRequest).call(this);
     __classPrivateFieldSet(this, _PlayerStatusMonitor_statusRequestController, new node_abort_controller_1.AbortController(), "f");
-    const playerStatus = await __classPrivateFieldGet(this, _PlayerStatusMonitor_instances, "m", _PlayerStatusMonitor_requestPlayerStatus).call(this, __classPrivateFieldGet(this, _PlayerStatusMonitor_statusRequestController, "f"));
-    if (playerStatus._requestAborted !== undefined && playerStatus._requestAborted) {
-        return;
+    try {
+        const playerStatus = await __classPrivateFieldGet(this, _PlayerStatusMonitor_instances, "m", _PlayerStatusMonitor_requestPlayerStatus).call(this, __classPrivateFieldGet(this, _PlayerStatusMonitor_statusRequestController, "f"));
+        if (playerStatus._requestAborted !== undefined && playerStatus._requestAborted) {
+            return;
+        }
+        // Check if we got a valid result
+        if (!playerStatus.result) {
+            SqueezeliteMCContext_1.default.getLogger().warn('[squeezelite_mc] Player status request returned no result.');
+            return;
+        }
+        // For Music Assistant, ensure we parse the result even when in a sync group
+        // The status command should return the correct information including sync state
+        this.emit('update', {
+            player: __classPrivateFieldGet(this, _PlayerStatusMonitor_player, "f"),
+            status: __classPrivateFieldGet(this, _PlayerStatusMonitor_instances, "m", _PlayerStatusMonitor_parsePlayerStatusResult).call(this, playerStatus.result)
+        });
     }
-    this.emit('update', {
-        player: __classPrivateFieldGet(this, _PlayerStatusMonitor_player, "f"),
-        status: __classPrivateFieldGet(this, _PlayerStatusMonitor_instances, "m", _PlayerStatusMonitor_parsePlayerStatusResult).call(this, playerStatus.result)
-    });
+    catch (error) {
+        SqueezeliteMCContext_1.default.getLogger().error(SqueezeliteMCContext_1.default.getErrorMessage('[squeezelite_mc] Error getting player status: ', error));
+    }
 }, _PlayerStatusMonitor_abortCurrentAndPendingStatusRequest = function _PlayerStatusMonitor_abortCurrentAndPendingStatusRequest() {
     if (__classPrivateFieldGet(this, _PlayerStatusMonitor_statusRequestTimer, "f")) {
         clearTimeout(__classPrivateFieldGet(this, _PlayerStatusMonitor_statusRequestTimer, "f"));
@@ -177,7 +189,23 @@ _PlayerStatusMonitor_player = new WeakMap(), _PlayerStatusMonitor_serverCredenti
         clearInterval(__classPrivateFieldGet(this, _PlayerStatusMonitor_pollingInterval, "f"));
     }
     __classPrivateFieldSet(this, _PlayerStatusMonitor_pollingInterval, setInterval(async () => {
-        await __classPrivateFieldGet(this, _PlayerStatusMonitor_instances, "m", _PlayerStatusMonitor_getStatusAndEmit).call(this);
+        try {
+            // Check for sync master changes when using Music Assistant
+            const syncResult = await __classPrivateFieldGet(this, _PlayerStatusMonitor_instances, "m", _PlayerStatusMonitor_getPlayerSyncMaster).call(this);
+            if (syncResult.syncMaster !== __classPrivateFieldGet(this, _PlayerStatusMonitor_syncMaster, "f")) {
+                if (syncResult.syncMaster) {
+                    SqueezeliteMCContext_1.default.getLogger().info(`[squeezelite_mc] Squeezelite sync master changed to ${syncResult.syncMaster}.`);
+                }
+                else if (__classPrivateFieldGet(this, _PlayerStatusMonitor_syncMaster, "f")) {
+                    SqueezeliteMCContext_1.default.getLogger().info('[squeezelite_mc] Squeezelite removed from sync group.');
+                }
+                __classPrivateFieldSet(this, _PlayerStatusMonitor_syncMaster, syncResult.syncMaster, "f");
+            }
+            await __classPrivateFieldGet(this, _PlayerStatusMonitor_instances, "m", _PlayerStatusMonitor_getStatusAndEmit).call(this);
+        }
+        catch (error) {
+            SqueezeliteMCContext_1.default.getLogger().error(SqueezeliteMCContext_1.default.getErrorMessage('[squeezelite_mc] Error in polling loop: ', error));
+        }
     }, __classPrivateFieldGet(this, _PlayerStatusMonitor_pollingIntervalMs, "f")), "f");
 }, _PlayerStatusMonitor_requestPlayerStatus = async function _PlayerStatusMonitor_requestPlayerStatus(abortController) {
     const connectParams = (0, Util_1.getServerConnectParams)(__classPrivateFieldGet(this, _PlayerStatusMonitor_player, "f").server, __classPrivateFieldGet(this, _PlayerStatusMonitor_serverCredentials, "f"), 'rpc');
@@ -213,31 +241,45 @@ async function _PlayerStatusMonitor_getPlayerSyncMaster() {
         };
     }
 }, _PlayerStatusMonitor_parsePlayerStatusResult = function _PlayerStatusMonitor_parsePlayerStatusResult(data) {
+    if (!data) {
+        SqueezeliteMCContext_1.default.getLogger().warn('[squeezelite_mc] Received null or undefined data in parsePlayerStatusResult');
+        return {
+            mode: 'stop',
+            time: 0,
+            volume: 0,
+            repeatMode: 0,
+            shuffleMode: 0,
+            canSeek: 0
+        };
+    }
     const result = {
-        mode: data.mode,
+        mode: data.mode || 'stop',
         time: data.time,
         volume: data['mixer volume'],
         repeatMode: data['playlist repeat'],
         shuffleMode: data['playlist shuffle'],
         canSeek: data['can_seek']
     };
-    const track = data.playlist_loop[0];
-    if (track) {
-        result.currentTrack = {
-            type: track.type,
-            title: track.title,
-            artist: track.artist,
-            trackArtist: track.trackartist,
-            albumArtist: track.albumartist,
-            album: track.album,
-            remoteTitle: track.remote_title,
-            artworkUrl: track.artwork_url,
-            coverArt: track.coverart,
-            duration: track.duration,
-            sampleRate: track.samplerate,
-            sampleSize: track.samplesize,
-            bitrate: track.bitrate
-        };
+    // Safely check for playlist_loop array and first track
+    if (data.playlist_loop && Array.isArray(data.playlist_loop) && data.playlist_loop.length > 0) {
+        const track = data.playlist_loop[0];
+        if (track) {
+            result.currentTrack = {
+                type: track.type,
+                title: track.title,
+                artist: track.artist,
+                trackArtist: track.trackartist,
+                albumArtist: track.albumartist,
+                album: track.album,
+                remoteTitle: track.remote_title,
+                artworkUrl: track.artwork_url,
+                coverArt: track.coverart,
+                duration: track.duration,
+                sampleRate: track.samplerate,
+                sampleSize: track.samplesize,
+                bitrate: track.bitrate
+            };
+        }
     }
     return result;
 };
