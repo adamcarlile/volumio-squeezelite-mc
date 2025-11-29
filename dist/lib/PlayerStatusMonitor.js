@@ -13,7 +13,7 @@ var __classPrivateFieldGet = (this && this.__classPrivateFieldGet) || function (
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
-var _PlayerStatusMonitor_instances, _PlayerStatusMonitor_player, _PlayerStatusMonitor_serverCredentials, _PlayerStatusMonitor_notificationListener, _PlayerStatusMonitor_statusRequestTimer, _PlayerStatusMonitor_statusRequestController, _PlayerStatusMonitor_syncMaster, _PlayerStatusMonitor_handleDisconnect, _PlayerStatusMonitor_handleNotification, _PlayerStatusMonitor_getStatusAndEmit, _PlayerStatusMonitor_abortCurrentAndPendingStatusRequest, _PlayerStatusMonitor_createAndStartNotificationListener, _PlayerStatusMonitor_requestPlayerStatus, _PlayerStatusMonitor_getPlayerSyncMaster, _PlayerStatusMonitor_parsePlayerStatusResult;
+var _PlayerStatusMonitor_instances, _PlayerStatusMonitor_player, _PlayerStatusMonitor_serverCredentials, _PlayerStatusMonitor_notificationListener, _PlayerStatusMonitor_statusRequestTimer, _PlayerStatusMonitor_statusRequestController, _PlayerStatusMonitor_syncMaster, _PlayerStatusMonitor_isMusicAssistant, _PlayerStatusMonitor_pollingInterval, _PlayerStatusMonitor_pollingIntervalMs, _PlayerStatusMonitor_handleDisconnect, _PlayerStatusMonitor_handleNotification, _PlayerStatusMonitor_getStatusAndEmit, _PlayerStatusMonitor_abortCurrentAndPendingStatusRequest, _PlayerStatusMonitor_createAndStartNotificationListener, _PlayerStatusMonitor_detectMusicAssistant, _PlayerStatusMonitor_startPolling, _PlayerStatusMonitor_requestPlayerStatus, _PlayerStatusMonitor_getPlayerSyncMaster, _PlayerStatusMonitor_parsePlayerStatusResult;
 Object.defineProperty(exports, "__esModule", { value: true });
 const events_1 = __importDefault(require("events"));
 const SqueezeliteMCContext_1 = __importDefault(require("./SqueezeliteMCContext"));
@@ -31,15 +31,31 @@ class PlayerStatusMonitor extends events_1.default {
         _PlayerStatusMonitor_statusRequestTimer.set(this, void 0);
         _PlayerStatusMonitor_statusRequestController.set(this, void 0);
         _PlayerStatusMonitor_syncMaster.set(this, void 0);
+        _PlayerStatusMonitor_isMusicAssistant.set(this, void 0);
+        _PlayerStatusMonitor_pollingInterval.set(this, void 0);
+        _PlayerStatusMonitor_pollingIntervalMs.set(this, void 0);
         __classPrivateFieldSet(this, _PlayerStatusMonitor_player, player, "f");
         __classPrivateFieldSet(this, _PlayerStatusMonitor_serverCredentials, serverCredentials, "f");
         __classPrivateFieldSet(this, _PlayerStatusMonitor_notificationListener, null, "f");
         __classPrivateFieldSet(this, _PlayerStatusMonitor_statusRequestTimer, null, "f");
         __classPrivateFieldSet(this, _PlayerStatusMonitor_statusRequestController, null, "f");
         __classPrivateFieldSet(this, _PlayerStatusMonitor_syncMaster, null, "f");
+        __classPrivateFieldSet(this, _PlayerStatusMonitor_isMusicAssistant, false, "f");
+        __classPrivateFieldSet(this, _PlayerStatusMonitor_pollingInterval, null, "f");
+        __classPrivateFieldSet(this, _PlayerStatusMonitor_pollingIntervalMs, 1000, "f"); // Poll every 1 second for Music Assistant
     }
     async start() {
-        __classPrivateFieldSet(this, _PlayerStatusMonitor_notificationListener, await __classPrivateFieldGet(this, _PlayerStatusMonitor_instances, "m", _PlayerStatusMonitor_createAndStartNotificationListener).call(this), "f");
+        // Detect if server is Music Assistant
+        __classPrivateFieldSet(this, _PlayerStatusMonitor_isMusicAssistant, await __classPrivateFieldGet(this, _PlayerStatusMonitor_instances, "m", _PlayerStatusMonitor_detectMusicAssistant).call(this), "f");
+        if (__classPrivateFieldGet(this, _PlayerStatusMonitor_isMusicAssistant, "f")) {
+            SqueezeliteMCContext_1.default.getLogger().info('[squeezelite_mc] Music Assistant server detected. Using polling mode instead of event subscription.');
+            // Start polling for Music Assistant
+            __classPrivateFieldGet(this, _PlayerStatusMonitor_instances, "m", _PlayerStatusMonitor_startPolling).call(this);
+        }
+        else {
+            // Use notification listener for standard LMS
+            __classPrivateFieldSet(this, _PlayerStatusMonitor_notificationListener, await __classPrivateFieldGet(this, _PlayerStatusMonitor_instances, "m", _PlayerStatusMonitor_createAndStartNotificationListener).call(this), "f");
+        }
         __classPrivateFieldSet(this, _PlayerStatusMonitor_syncMaster, (await __classPrivateFieldGet(this, _PlayerStatusMonitor_instances, "m", _PlayerStatusMonitor_getPlayerSyncMaster).call(this)).syncMaster, "f");
         if (__classPrivateFieldGet(this, _PlayerStatusMonitor_syncMaster, "f")) {
             SqueezeliteMCContext_1.default.getLogger().info(`[squeezelite_mc] Squeezelite in sync group with sync master ${__classPrivateFieldGet(this, _PlayerStatusMonitor_syncMaster, "f")}.`);
@@ -49,6 +65,10 @@ class PlayerStatusMonitor extends events_1.default {
     async stop() {
         if (__classPrivateFieldGet(this, _PlayerStatusMonitor_notificationListener, "f")) {
             await __classPrivateFieldGet(this, _PlayerStatusMonitor_notificationListener, "f").stop();
+        }
+        if (__classPrivateFieldGet(this, _PlayerStatusMonitor_pollingInterval, "f")) {
+            clearInterval(__classPrivateFieldGet(this, _PlayerStatusMonitor_pollingInterval, "f"));
+            __classPrivateFieldSet(this, _PlayerStatusMonitor_pollingInterval, null, "f");
         }
     }
     getPlayer() {
@@ -62,7 +82,7 @@ class PlayerStatusMonitor extends events_1.default {
     }
 }
 exports.default = PlayerStatusMonitor;
-_PlayerStatusMonitor_player = new WeakMap(), _PlayerStatusMonitor_serverCredentials = new WeakMap(), _PlayerStatusMonitor_notificationListener = new WeakMap(), _PlayerStatusMonitor_statusRequestTimer = new WeakMap(), _PlayerStatusMonitor_statusRequestController = new WeakMap(), _PlayerStatusMonitor_syncMaster = new WeakMap(), _PlayerStatusMonitor_instances = new WeakSet(), _PlayerStatusMonitor_handleDisconnect = function _PlayerStatusMonitor_handleDisconnect() {
+_PlayerStatusMonitor_player = new WeakMap(), _PlayerStatusMonitor_serverCredentials = new WeakMap(), _PlayerStatusMonitor_notificationListener = new WeakMap(), _PlayerStatusMonitor_statusRequestTimer = new WeakMap(), _PlayerStatusMonitor_statusRequestController = new WeakMap(), _PlayerStatusMonitor_syncMaster = new WeakMap(), _PlayerStatusMonitor_isMusicAssistant = new WeakMap(), _PlayerStatusMonitor_pollingInterval = new WeakMap(), _PlayerStatusMonitor_pollingIntervalMs = new WeakMap(), _PlayerStatusMonitor_instances = new WeakSet(), _PlayerStatusMonitor_handleDisconnect = function _PlayerStatusMonitor_handleDisconnect() {
     if (!__classPrivateFieldGet(this, _PlayerStatusMonitor_notificationListener, "f")) {
         return;
     }
@@ -135,6 +155,30 @@ _PlayerStatusMonitor_player = new WeakMap(), _PlayerStatusMonitor_serverCredenti
     notificationListener.on('disconnect', __classPrivateFieldGet(this, _PlayerStatusMonitor_instances, "m", _PlayerStatusMonitor_handleDisconnect).bind(this));
     await notificationListener.start();
     return notificationListener;
+}, _PlayerStatusMonitor_detectMusicAssistant = async function _PlayerStatusMonitor_detectMusicAssistant() {
+    const connectParams = (0, Util_1.getServerConnectParams)(__classPrivateFieldGet(this, _PlayerStatusMonitor_player, "f").server, __classPrivateFieldGet(this, _PlayerStatusMonitor_serverCredentials, "f"), 'rpc');
+    try {
+        const response = await (0, RPC_1.sendRpcRequest)(connectParams, [
+            '',
+            ['serverstatus']
+        ]);
+        if (response.result && response.result.uuid === 'aioslimproto') {
+            return true;
+        }
+        return false;
+    }
+    catch (error) {
+        SqueezeliteMCContext_1.default.getLogger().error(SqueezeliteMCContext_1.default.getErrorMessage('[squeezelite_mc] Error detecting server type: ', error));
+        // Default to standard LMS behavior on error
+        return false;
+    }
+}, _PlayerStatusMonitor_startPolling = function _PlayerStatusMonitor_startPolling() {
+    if (__classPrivateFieldGet(this, _PlayerStatusMonitor_pollingInterval, "f")) {
+        clearInterval(__classPrivateFieldGet(this, _PlayerStatusMonitor_pollingInterval, "f"));
+    }
+    __classPrivateFieldSet(this, _PlayerStatusMonitor_pollingInterval, setInterval(async () => {
+        await __classPrivateFieldGet(this, _PlayerStatusMonitor_instances, "m", _PlayerStatusMonitor_getStatusAndEmit).call(this);
+    }, __classPrivateFieldGet(this, _PlayerStatusMonitor_pollingIntervalMs, "f")), "f");
 }, _PlayerStatusMonitor_requestPlayerStatus = async function _PlayerStatusMonitor_requestPlayerStatus(abortController) {
     const connectParams = (0, Util_1.getServerConnectParams)(__classPrivateFieldGet(this, _PlayerStatusMonitor_player, "f").server, __classPrivateFieldGet(this, _PlayerStatusMonitor_serverCredentials, "f"), 'rpc');
     return (0, RPC_1.sendRpcRequest)(connectParams, [

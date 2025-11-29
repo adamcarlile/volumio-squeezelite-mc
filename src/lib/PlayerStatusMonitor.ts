@@ -34,7 +34,7 @@ export default class PlayerStatusMonitor extends EventEmitter {
   async start() {
     // Detect if server is Music Assistant
     this.#isMusicAssistant = await this.#detectMusicAssistant();
-    
+
     if (this.#isMusicAssistant) {
       sm.getLogger().info('[squeezelite_mc] Music Assistant server detected. Using polling mode instead of event subscription.');
       // Start polling for Music Assistant
@@ -44,7 +44,7 @@ export default class PlayerStatusMonitor extends EventEmitter {
       // Use notification listener for standard LMS
       this.#notificationListener = await this.#createAndStartNotificationListener();
     }
-    
+
     this.#syncMaster = (await this.#getPlayerSyncMaster()).syncMaster;
     if (this.#syncMaster) {
       sm.getLogger().info(`[squeezelite_mc] Squeezelite in sync group with sync master ${this.#syncMaster}.`);
@@ -162,7 +162,7 @@ export default class PlayerStatusMonitor extends EventEmitter {
         '',
         [ 'serverstatus' ]
       ]);
-      
+
       if (response.result && response.result.uuid === 'aioslimproto') {
         return true;
       }
