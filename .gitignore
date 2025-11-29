@@ -1,3 +1,8 @@
 node_modules
 tests
 tsconfig.tsbuildinfo
+
+# mise
+mise.local.toml
+mise.toml
+.tool-versions
